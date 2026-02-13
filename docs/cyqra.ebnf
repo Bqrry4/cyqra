@@ -1,0 +1,73 @@
+/*---- Lexical ----*/
+digit ::= '0' | ... | '9';
+lower-case ::= 'a' | 'b' | 'c' | ... | 'x' | 'y' | 'z';
+upper-case ::= 'A' | 'B' | 'C' | ... | 'X' | 'Y' | 'Z';
+letter ::= upper-case | lower-case;
+number ::= digit , { digit };
+
+char ::= "'" , ? ascii-char ? , "'" ;
+string ::= '"' , { ? any-char ? } , '"';
+bool ::= "true" | "false";
+
+literal ::= number
+	 	  | char
+		  | string
+		  | bool
+		  ; 
+
+/*---- Syntax ----*/
+comment ::= "//" , ? any-char ? , "\n"
+		  | "/*" , ? any-char ? , "*/";
+
+identifier ::= letter , { letter | digit | "_" };
+
+binding ::= let_binding | mut_binding | env_binding;
+let_binding ::= "let" , identifier , [ "=" , expression ];
+mut_binding ::= "mut" , identifier , [ "=" , expression ];
+env_binding ::= "env" , identifier , "=" , expression ;
+
+expression ::= assignment;
+
+function_ref ::= "&" , identifier;
+primary ::= literal
+		  | identifier
+		  | "(" , expression , ")"
+		  | function_ref
+		  ;
+unary ::= prefix | postfix | primary;
+
+prefix_op  ::= "+" | "-" | "++" | "--" ;
+postfix_op ::= "++" | "--" ;
+/*  */
+prefix  ::= prefix_op , primary;
+postfix ::= primary , postfix_op;
+
+/* Left to right associativity */
+binary ::= unary , { binary_op , unary } ;
+binary_op  ::= "*" | "/" | "%"
+			 | "+" | "-"
+			 | "<<" | ">>"
+			 | "<" | "<=" | ">" | ">="
+			 | "==" | "!="
+			 | "&" | "^" | "|"
+			 | "and" | "or"
+			 | "&&" | "||"
+			 ;
+
+assignment ::= identifier , assignment_op , binary
+			 | binary;
+assignment_op ::= "="
+				| "+=" | "-="
+				| "*=" | "/="
+				;
+
+stmt ::= (binding | expression) , stmt_separator;	
+stmt_separator ::= ";" | "\n";
+
+stmt_list ::= stmt , { stmt };
+
+
+/*! separate syntax for calling*/
+function_call ::= identifier , "(" , [ argument_list ] , ")" ;
+argument_list ::= expression , { "," , expression } ;
+
