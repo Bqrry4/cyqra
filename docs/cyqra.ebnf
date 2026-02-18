@@ -24,7 +24,8 @@ identifier ::= letter , { letter | digit | "_" };
 binding ::= let_binding | mut_binding | env_binding;
 let_binding ::= "let" , identifier , [ "=" , expression ];
 mut_binding ::= "mut" , identifier , [ "=" , expression ];
-env_binding ::= "env" , identifier , "=" , expression ;
+env_binding ::= "env" , identifier , "=" , expression;
+alias_binding ::= "alias" , identifier , "=" , expression; 
 
 expression ::= assignment;
 
@@ -49,7 +50,7 @@ binary_op  ::= "*" | "/" | "%"
 			 | "<<" | ">>"
 			 | "<" | "<=" | ">" | ">="
 			 | "==" | "!="
-			 | "&" | "^" | "|"
+			 | "&&&" | "^^^" | "|||"
 			 | "and" | "or"
 			 | "&&" | "||"
 			 ;
