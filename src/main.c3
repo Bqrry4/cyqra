@@ -29,10 +29,10 @@ fn void int_loop() => @pool() {
         List{Token} a;
         a.init(tmem);
         List{Token} tokens = lexer::lex(line, a);
-        foreach(t:tokens)
-        {
-         io::print(t);   
-        }
+        // foreach(t:tokens)
+        // {
+         // io::print(t);   
+        // }
         
         Parser parser = parser::new(tmem, tokens);
         parser.parse();
@@ -43,7 +43,7 @@ fn void int_loop() => @pool() {
 
 fn int main()
 {
-   int_loop();
+    int_loop();
 
     return 0;
 }

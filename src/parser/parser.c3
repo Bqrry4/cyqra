@@ -153,10 +153,11 @@ fn Expr*? Parser.expr_head(&self)
 	
 	switch(tk.kind) {
 		//& literal
-		case TokenKind.INTEGER:
+		case INTEGER:
+		case FLOAT:
 			nextcase;
 		//& identifier
-		case TokenKind.IDENTIFIER:
+		case IDENTIFIER:
 			return mem::new(Expr, {
 				.kind = ExprKind.PRIMARY,
 				.primary = {
@@ -164,7 +165,7 @@ fn Expr*? Parser.expr_head(&self)
 				}
 			});	
 		//& "(" , expression , ")"
-		case TokenKind.OPEN_PHARANTESIS:
+		case OPEN_PHARANTESIS:
 			Expr* expr = self.parse_expression()!;
 			if(self.advance()!.kind != TokenKind.CLOSED_PHARANTESIS)
 			{

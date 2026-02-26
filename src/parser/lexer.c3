@@ -150,8 +150,9 @@ fn Token lex_unit(char c)
      switch {
           case ascii::is_space_m(c): return lex_space(c);
           case ascii::is_digit_m(c): return lex_number();
-          default: return lex_identifier(c);
-     }
+          case is_identifier_char(c): return lex_identifier();
+          default: return mk_token(TokenKind.EOF);
+      }
 }
 
 fn Token lex_space(char c)
@@ -187,7 +188,15 @@ fn Token lex_string(char c)
 
      return mk_token(TokenKind.EOF);
 }
-fn Token lex_identifier(char c)
+
+fn bool is_identifier_char(char c)
 {
-     return mk_token(TokenKind.EOF);
+     return ascii::is_alnum_m(c) || c == '_';
+}
+
+fn Token lex_identifier()
+{
+     while(is_identifier_char(peek())) advance();
+
+     return mk_token(TokenKind.IDENTIFIER);
 }
