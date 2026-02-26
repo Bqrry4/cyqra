@@ -3,23 +3,26 @@ import std::collections::list;
 import std::io;
 import std::ascii;
 
-enum TokenKind : int
+enum TokenKind : int @public
 {
      UNKNOWN,
 
      /* Operators */
      PLUS, MINUS,
-     STAR, SLASH, PERCENT,
+     EXCLAMATION,
+     PLUS_PLUS, MINUS_MINUS,
+     STAR_STAR,
+     STAR, SLASH, SLASH_SLASH, PERCENT,
      SHL, SHR,
      LT, LTE, GT, GTE,
      EQ, NEQ,
      L_AND, L_OR,
+     PIPE, PIPE_ALL,
+     DOT, DOT_DOT,
+
      ASGN,
      PLUS_ASGN, MINUS_ASGN,
      STAR_ASGN, SLASH_ASGN,
-     PIPE, PIPE_ALL,
-     DOT, DOT_DOT,
-     
      
      /* Brackets */
      OPEN_PHARANTESIS, CLOSED_PHARANTESIS,
@@ -29,6 +32,10 @@ enum TokenKind : int
      /* literals */
      INTEGER, FLOAT,
      STRING,
+
+     IDENTIFIER,
+
+     SEMICOLON,
 
      NEW_LINE, SPACE,
      
@@ -70,12 +77,9 @@ fn List{ Token } lex(String source, List{ Token } tokens) @public
 fn void analyze()
 {
      Token tk;
-     while(true)
+     while((tk = next_token()).kind != TokenKind.EOF)
      {
-          tk = next_token();
-          if (tk.kind == TokenKind.EOF) break;
-
-          lexer.output.push(tk);
+         lexer.output.push(tk);
      }
 }
 
@@ -106,11 +110,14 @@ fn Token next_token()
       
      switch(c)
      {
-          case '+': return follows('=') ? mk_token(TokenKind.PLUS_ASGN)
+          case '+': return follows('+') ? mk_token(TokenKind.PLUS_PLUS)
+                         : follows('=') ? mk_token(TokenKind.PLUS_ASGN)
                                              : mk_token(TokenKind.PLUS);
-          case '-': return follows('=') ? mk_token(TokenKind.MINUS_ASGN)
+          case '-': return follows('-') ? mk_token(TokenKind.MINUS_MINUS)
+                         : follows('=') ? mk_token(TokenKind.MINUS_ASGN)
                                              : mk_token(TokenKind.MINUS);
-          case '*': return follows('=') ? mk_token(TokenKind.STAR_ASGN)
+          case '*': return follows('*') ? mk_token(TokenKind.STAR_STAR)
+                         : follows('=') ? mk_token(TokenKind.STAR_ASGN)
                                              : mk_token(TokenKind.STAR);
           case '/': return follows('=') ? mk_token(TokenKind.SLASH_ASGN)
                                              : mk_token(TokenKind.SLASH);
@@ -124,7 +131,7 @@ fn Token next_token()
           case '=': return follows('=') ? mk_token(TokenKind.ASGN)
                                              : mk_token(TokenKind.EQ);
           case '!': return follows('=') ? mk_token(TokenKind.NEQ)
-                                             : mk_token(TokenKind.UNKNOWN);
+                                             : mk_token(TokenKind.EXCLAMATION);
           case '(': return mk_token(TokenKind.OPEN_PHARANTESIS);
           case ')': return mk_token(TokenKind.CLOSED_PHARANTESIS);
           case '[': return mk_token(TokenKind.OPEN_BRACKET);
