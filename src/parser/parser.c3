@@ -82,7 +82,7 @@ fn Token? Parser.peek(&self)
 }
 fn bool Parser.eot(&self) => self.current >= self.tokens.len(); 
 <* *>
-// fn bool Parser.follows(&self, TokenKind expect) => (self.peek().kind == expect) && self.current++;
+fn bool? Parser.follows(&self, TokenKind expect) => (self.peek()!.kind == expect) && self.current++;
 
 fn void Parser.parse(&self)
 {
@@ -97,7 +97,7 @@ fn void Parser.parse(&self)
 				switch(b)
 				{
 					case OUT_OF_TOKENS:
-						io::printn("out of tokens");
+						io::printn("Unexpected end of expression");
 					case ast::INVALID_EXPRESSION:
 						io::printn("invalid expr");
 					default:
@@ -167,8 +167,9 @@ fn Expr*? Parser.expr_head(&self)
 		//& "(" , expression , ")"
 		case OPEN_PHARANTESIS:
 			Expr* expr = self.parse_expression()!;
-			if(self.advance()!.kind != TokenKind.CLOSED_PHARANTESIS)
+			if(!self.follows(CLOSED_PHARANTESIS)!)
 			{
+				io::printn("Was expecting Closed pharantesis");
 				return ast::INVALID_EXPRESSION~;
 			}	
 			return expr;
@@ -197,12 +198,61 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 {
 	Expr* expr = self.expr_head()!;
 	//& { expr_tail }
-	while (try op = self.peek())
-	{
-		//& postfix_op
-		if(try prec = self.check_postfix_op(op.kind))
-		{
+	while (try op = self.peek()) {
+		//& "(" , [ argument_list ] , ")"
+		if (op.kind == TokenKind.OPEN_PHARANTESIS) {
 			self.advance()!;
+
+			List{ Expr* } args;
+			args.init(mem);
+
+
+			if (!self.follows(CLOSED_PHARANTESIS)!)
+        	{
+            	do {
+                	args.push(self.parse_expression()!);
+    	        } while (self.follows(TokenKind.COMMA)!);
+
+				if(!self.follows(CLOSED_PHARANTESIS)!) {
+					io::printn("Was expecting Close pharantesis");
+					return ast::INVALID_EXPRESSION~;				
+				}
+         	}
+			
+			expr = mem::new(Expr, {
+				.kind = ExprKind.CALL,
+				.call = {
+					.callee = expr,
+					.args = args
+				}
+			});
+			continue;
+		}
+		//& "[" , expression , "]"
+		if (op.kind == TokenKind.OPEN_BRACKET) {
+			self.advance()!;
+			
+			Expr* index = self.parse_expression()!;
+			if(!self.follows(CLOSED_BRACKET)!) {
+				io::printn("Was expecting Close bracket");
+				return ast::INVALID_EXPRESSION~;				
+			}
+
+			expr = mem::new(Expr, {
+            	.kind = ExprKind.INDEX,
+            	.index = {
+                	.object = expr,
+                	.index = index
+            	}
+        	});
+			continue;
+		}
+
+	
+		//& postfix_op
+		if (try prec = self.check_postfix_op(op.kind)) {
+			self.advance()!;
+			
 			expr = mem::new(Expr, {
 				.kind = ExprKind.POSTFIX,
 				.postfix = {
@@ -213,9 +263,9 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 			continue;	
 		}
 		//& infix_op , expression
-		if(try prec = self.check_infix_op(op.kind, base_prec))
-		{
+		if (try prec = self.check_infix_op(op.kind, base_prec)) {
 			self.advance()!;
+			
 			Expr* rhs = self.parse_expression(prec)!;
 			expr = mem::new(Expr, {
 				.kind = ExprKind.INFIX,

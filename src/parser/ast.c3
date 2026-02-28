@@ -1,6 +1,7 @@
 module cyqra::parser::ast;
 import cyqra::lexer;
 import std::io;
+import std::collections::list;
 
 faultdef INVALID_EXPRESSION;
 
@@ -9,7 +10,9 @@ enum ExprKind
 	PRIMARY,
 	PREFIX,
 	POSTFIX,
-	INFIX	
+	INFIX,
+	CALL,
+	INDEX
 }
 
 
@@ -33,6 +36,16 @@ struct Infix
 	TokenKind op;
 	Expr* rhs;
 }
+struct Call
+{
+	Expr* callee;
+	List{ Expr* } args;
+}
+struct Index
+{
+	Expr* object;
+	Expr* index;
+}
 
 
 struct Expr
@@ -43,6 +56,8 @@ struct Expr
 		Prefix prefix;
 		Postfix postfix;
 		Infix infix;
+		Call call;
+		Index index;
 	}
 }
 
@@ -75,5 +90,18 @@ fn void Expr.print(&self)
 			self.infix.rhs.print();
 			io::print(") ");
 			break;
+		case CALL:
+			io::print(" (");
+			self.call.callee.print();
+			io::print(" ARGS: ");
+			foreach(arg : self.call.args) {
+				arg.print();
+			}
+			io::print(") ");
+		case INDEX:
+			io::print(" (");
+			self.index.object.print();
+			self.index.index.print();
+			io::print(") ");
 	}
 }

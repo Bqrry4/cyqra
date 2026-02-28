@@ -35,7 +35,7 @@ enum TokenKind : int @public
 
      IDENTIFIER,
 
-     SEMICOLON,
+     SEMICOLON, COMMA,
 
      NEW_LINE, SPACE,
      
@@ -138,6 +138,8 @@ fn Token next_token()
           case ']': return mk_token(TokenKind.CLOSED_BRACKET);
           case '{': return mk_token(TokenKind.OPEN_BRACE);
           case '}': return mk_token(TokenKind.CLOSED_BRACE);
+          case ';': return mk_token(TokenKind.SEMICOLON);
+          case ',': return mk_token(TokenKind.COMMA);
           case '\0': return mk_token(TokenKind.EOF);
           case '"': return lex_string(c);
           default: return lex_unit(c); 
