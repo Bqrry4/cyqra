@@ -12,7 +12,8 @@ enum ExprKind
 	POSTFIX,
 	INFIX,
 	CALL,
-	INDEX
+	INDEX,
+	BINDING
 }
 
 
@@ -46,6 +47,12 @@ struct Index
 	Expr* object;
 	Expr* index;
 }
+struct Binding
+{
+	TokenKind type;
+    Token identifier;
+    Expr* value;
+}
 
 
 struct Expr
@@ -58,6 +65,7 @@ struct Expr
 		Infix infix;
 		Call call;
 		Index index;
+		Binding binding;
 	}
 }
 
@@ -103,5 +111,12 @@ fn void Expr.print(&self)
 			self.index.object.print();
 			self.index.index.print();
 			io::print(") ");
+		case BINDING:
+			io::print(" (");
+			io::print(self.binding.type);
+			io::print(self.binding.identifier);
+			self.binding.value.print();
+			io::print(") ");
+			break;
 	}
 }

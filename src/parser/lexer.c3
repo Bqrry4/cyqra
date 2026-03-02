@@ -1,194 +1,151 @@
-module cyqra::lexer @private;
+module cyqra::lexer;
 import std::collections::list;
 import std::io;
 import std::ascii;
-
-enum TokenKind : int @public
-{
-     UNKNOWN,
-
-     /* Operators */
-     PLUS, MINUS,
-     EXCLAMATION,
-     PLUS_PLUS, MINUS_MINUS,
-     STAR_STAR,
-     STAR, SLASH, SLASH_SLASH, PERCENT,
-     SHL, SHR,
-     LT, LTE, GT, GTE,
-     EQ, NEQ,
-     L_AND, L_OR,
-     PIPE, PIPE_ALL,
-     DOT, DOT_DOT,
-
-     ASGN,
-     PLUS_ASGN, MINUS_ASGN,
-     STAR_ASGN, SLASH_ASGN,
-     
-     /* Brackets */
-     OPEN_PHARANTESIS, CLOSED_PHARANTESIS,
-     OPEN_BRACE, CLOSED_BRACE,
-     OPEN_BRACKET, CLOSED_BRACKET,
-
-     /* literals */
-     INTEGER, FLOAT,
-     STRING,
-
-     IDENTIFIER,
-
-     SEMICOLON, COMMA,
-
-     NEW_LINE, SPACE,
-     
-     EOF,
-}
-
-
-struct Token @public
-{
-     TokenKind kind;
-     // A slice over the big string
-     String value;        
-}
-
+import libc;
 
 struct Lexer
 {
+     Allocator allocator;
+
      String source;
      List{ Token } output;
 
      char* tk_start;
      char* tk_current;
-}
-Lexer lexer;
+ }
 
-fn List{ Token } lex(String source, List{ Token } tokens) @public
+fn Lexer new(Allocator allocator, String source) @public
 {
-     lexer = {
+     
+     List{ Token } tokens;
+     tokens.init(allocator);
+     return {
+          .allocator = allocator,
           .source = source,
-          .tk_current = source,
-          .output = tokens
+          .output = tokens,
+          .tk_start = source,
+          .tk_current = source
      };
-     analyze();
-
-     return lexer.output;
 }
 
 
-fn void analyze()
+fn List{ Token } Lexer.analyze(&self)
 {
      Token tk;
-     while((tk = next_token()).kind != TokenKind.EOF)
+     while((tk = self.next_token()).kind != TokenKind.EOF)
      {
-         lexer.output.push(tk);
+         self.output.push(tk);
      }
+     return self.output;
 }
 
 
 // fn bool eol() => lexer.pos >= lexer.source.len;
 <* Returns the character currently pointed by the @tk_current, then inc it *>
-fn char advance() => *(lexer.tk_current++);
+fn char Lexer.advance(&self) => *(self.tk_current++);
 <* Checks the next *>
-fn char peek() => *(lexer.tk_current);
+fn char Lexer.peek(&self) => *(self.tk_current);
 <* *>
-fn bool follows(char expect) => (peek() == expect) && lexer.tk_current++;
+fn bool Lexer.follows(&self, char expect) => (self.peek() == expect) && self.tk_current++;
 
-fn Token mk_token(TokenKind kind)
+fn Token Lexer.mk_token(&self, TokenKind kind)
 {
      return {
           .kind = kind,
-          .value = (String)lexer.tk_start[
-               ..lexer.tk_current - lexer.tk_start - 1
+          .value = (String)self.tk_start[
+               ..self.tk_current - self.tk_start - 1
           ]
      };   
 }
 
 
-fn Token next_token()
+fn Token Lexer.next_token(&self)
 {
-     lexer.tk_start = lexer.tk_current;
-     char c = advance();
+     self.tk_start = self.tk_current;
+     char c = self.advance();
       
      switch(c)
      {
-          case '+': return follows('+') ? mk_token(TokenKind.PLUS_PLUS)
-                         : follows('=') ? mk_token(TokenKind.PLUS_ASGN)
-                                             : mk_token(TokenKind.PLUS);
-          case '-': return follows('-') ? mk_token(TokenKind.MINUS_MINUS)
-                         : follows('=') ? mk_token(TokenKind.MINUS_ASGN)
-                                             : mk_token(TokenKind.MINUS);
-          case '*': return follows('*') ? mk_token(TokenKind.STAR_STAR)
-                         : follows('=') ? mk_token(TokenKind.STAR_ASGN)
-                                             : mk_token(TokenKind.STAR);
-          case '/': return follows('=') ? mk_token(TokenKind.SLASH_ASGN)
-                                             : mk_token(TokenKind.SLASH);
-          case '%': return mk_token(TokenKind.PERCENT);
-          case '|': return follows('@') ? mk_token(TokenKind.PIPE_ALL)
-                                             : mk_token(TokenKind.PIPE);
-          case '<': return follows('=') ? mk_token(TokenKind.LTE)
-                                             : mk_token(TokenKind.LT);
-          case '>': return follows('=') ? mk_token(TokenKind.GTE)
-                                             : mk_token(TokenKind.GT);
-          case '=': return follows('=') ? mk_token(TokenKind.ASGN)
-                                             : mk_token(TokenKind.EQ);
-          case '!': return follows('=') ? mk_token(TokenKind.NEQ)
-                                             : mk_token(TokenKind.EXCLAMATION);
-          case '(': return mk_token(TokenKind.OPEN_PHARANTESIS);
-          case ')': return mk_token(TokenKind.CLOSED_PHARANTESIS);
-          case '[': return mk_token(TokenKind.OPEN_BRACKET);
-          case ']': return mk_token(TokenKind.CLOSED_BRACKET);
-          case '{': return mk_token(TokenKind.OPEN_BRACE);
-          case '}': return mk_token(TokenKind.CLOSED_BRACE);
-          case ';': return mk_token(TokenKind.SEMICOLON);
-          case ',': return mk_token(TokenKind.COMMA);
-          case '\0': return mk_token(TokenKind.EOF);
-          case '"': return lex_string(c);
-          default: return lex_unit(c); 
+          case '+': return self.follows('+') ? self.mk_token(TokenKind.PLUS_PLUS)
+                         : self.follows('=') ? self.mk_token(TokenKind.PLUS_ASGN)
+                                             : self.mk_token(TokenKind.PLUS);
+          case '-': return self.follows('-') ? self.mk_token(TokenKind.MINUS_MINUS)
+                         : self.follows('=') ? self.mk_token(TokenKind.MINUS_ASGN)
+                                             : self.mk_token(TokenKind.MINUS);
+          case '*': return self.follows('*') ? self.mk_token(TokenKind.STAR_STAR)
+                         : self.follows('=') ? self.mk_token(TokenKind.STAR_ASGN)
+                                             : self.mk_token(TokenKind.STAR);
+          case '/': return self.follows('=') ? self.mk_token(TokenKind.SLASH_ASGN)
+                                             : self.mk_token(TokenKind.SLASH);
+          case '%': return self.mk_token(TokenKind.PERCENT);
+          case '|': return self.follows('@') ? self.mk_token(TokenKind.PIPE_ALL)
+                                             : self.mk_token(TokenKind.PIPE);
+          case '<': return self.follows('=') ? self.mk_token(TokenKind.LTE)
+                                             : self.mk_token(TokenKind.LT);
+          case '>': return self.follows('=') ? self.mk_token(TokenKind.GTE)
+                                             : self.mk_token(TokenKind.GT);
+          case '=': return self.follows('=') ? self.mk_token(TokenKind.ASGN)
+                                             : self.mk_token(TokenKind.EQ);
+          case '!': return self.follows('=') ? self.mk_token(TokenKind.NEQ)
+                                             : self.mk_token(TokenKind.EXCLAMATION);
+          case '(': return self.mk_token(TokenKind.OPEN_PHARANTESIS);
+          case ')': return self.mk_token(TokenKind.CLOSED_PHARANTESIS);
+          case '[': return self.mk_token(TokenKind.OPEN_BRACKET);
+          case ']': return self.mk_token(TokenKind.CLOSED_BRACKET);
+          case '{': return self.mk_token(TokenKind.OPEN_BRACE);
+          case '}': return self.mk_token(TokenKind.CLOSED_BRACE);
+          case ';': return self.mk_token(TokenKind.SEMICOLON);
+          case ',': return self.mk_token(TokenKind.COMMA);
+          case '\0': return self.mk_token(TokenKind.EOF);
+          case '"': return self.lex_string(c);
+          default: return self.lex_unit(c); 
           
      }
  }
 
-fn Token lex_unit(char c)
+fn Token Lexer.lex_unit(&self, char c)
 {
      switch {
-          case ascii::is_space_m(c): return lex_space(c);
-          case ascii::is_digit_m(c): return lex_number();
-          case is_identifier_char(c): return lex_identifier();
-          default: return mk_token(TokenKind.EOF);
+          case ascii::is_space_m(c): return self.lex_space(c);
+          case ascii::is_digit_m(c): return self.lex_number();
+          case is_identifier_char(c): return self.lex_identifier();
+          default: return self.mk_token(TokenKind.EOF);
       }
 }
 
-fn Token lex_space(char c)
+fn Token Lexer.lex_space(&self, char c)
 {
      while (true)
      {
           switch (c) {
-               case '\n': return mk_token(TokenKind.NEW_LINE);
-               case ' ' : return mk_token(TokenKind.SPACE);     
-               default: return mk_token(TokenKind.UNKNOWN);
+               case '\n': return self.mk_token(TokenKind.NEW_LINE);
+               case ' ' : return self.mk_token(TokenKind.SPACE);     
+               default: return self.mk_token(TokenKind.UNKNOWN);
           }
      }
 }
 
-fn Token lex_number()
+fn Token Lexer.lex_number(&self)
 {
      TokenKind kind = TokenKind.INTEGER;
 
-     while (ascii::is_digit_m(peek())) advance();
+     while (ascii::is_digit_m(self.peek())) self.advance();
 
-     if (peek() == '.') {
+     if (self.peek() == '.') {
         kind = TokenKind.FLOAT;
-        advance();
-        while (ascii::is_digit_m(peek())) advance();
+        self.advance();
+        while (ascii::is_digit_m(self.peek())) self.advance();
      }
           
-     return mk_token(kind);
+     return self.mk_token(kind);
 }
 
-fn Token lex_string(char c)
+fn Token Lexer.lex_string(&self, char c)
 {
      
 
-     return mk_token(TokenKind.EOF);
+     return self.mk_token(TokenKind.EOF);
 }
 
 fn bool is_identifier_char(char c)
@@ -196,9 +153,28 @@ fn bool is_identifier_char(char c)
      return ascii::is_alnum_m(c) || c == '_';
 }
 
-fn Token lex_identifier()
+fn Token Lexer.lex_identifier(&self)
 {
-     while(is_identifier_char(peek())) advance();
+     while(is_identifier_char(self.peek())) self.advance();
 
-     return mk_token(TokenKind.IDENTIFIER);
+     if(try keyword = self.check_keywords()) {
+          return keyword;
+     }
+     
+     return self.mk_token(TokenKind.IDENTIFIER);
+}
+
+fn Token? Lexer.check_keywords(&self)
+{
+     switch {
+          case !libc::memcmp(self.tk_start, "let", 3): return self.mk_token(TokenKind.LET);
+          case !libc::memcmp(self.tk_start, "mut", 3): return self.mk_token(TokenKind.MUT);
+          case !libc::memcmp(self.tk_start, "env", 3): return self.mk_token(TokenKind.ENV);
+          case !libc::memcmp(self.tk_start, "alias", 5): return self.mk_token(TokenKind.ALIAS);
+          case !libc::memcmp(self.tk_start, "if", 2): return self.mk_token(TokenKind.IF);
+          case !libc::memcmp(self.tk_start, "else", 2): return self.mk_token(TokenKind.ELSE);
+          case !libc::memcmp(self.tk_start, "while", 5): return self.mk_token(TokenKind.WHILE);
+     }
+      
+     return NOT_FOUND~;
 }

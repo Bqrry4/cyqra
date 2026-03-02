@@ -68,22 +68,33 @@ fn void Parser.free(&self)
 
 faultdef OUT_OF_TOKENS;
 
-<* Returns the token currently pointed by the @current, then inc it *>
-fn Token? Parser.advance(&self)
+fn Token? Parser.advance(&self, bool skip_spaces = true)
 {
-	if(self.eot()) return OUT_OF_TOKENS~;
+	if (skip_spaces) self.skip_spaces();		
+	if (self.eot()) return OUT_OF_TOKENS~;
 	return (self.tokens[self.current++]);
 } 
-<* Checks the next *>
-fn Token? Parser.peek(&self)
+fn Token? Parser.peek(&self, bool skip_spaces = true)
 {
+	if (skip_spaces) self.skip_spaces();
 	if(self.eot()) return OUT_OF_TOKENS~;
 	return (self.tokens[self.current]);
 }
 fn bool Parser.eot(&self) => self.current >= self.tokens.len(); 
-<* *>
-fn bool? Parser.follows(&self, TokenKind expect) => (self.peek()!.kind == expect) && self.current++;
-
+fn bool? Parser.follows(&self, TokenKind expect, bool skip_spaces = true)
+{
+	if(skip_spaces) self.skip_spaces();
+	return (self.peek()!.kind == expect) && self.current++;
+} 
+fn void Parser.skip_spaces(&self)
+{
+	
+	while(!self.eot() &&
+		 (self.tokens[self.current].kind == TokenKind.SPACE ||
+		  self.tokens[self.current].kind == TokenKind.NEW_LINE)) {
+			self.current++;
+		};
+}
 fn void Parser.parse(&self)
 {
 	mem::@scoped(self.allocator)
@@ -91,7 +102,7 @@ fn void Parser.parse(&self)
 		while(self.current < self.tokens.len())
 		{
 
-			Expr*? a = self.parse_expression();
+			Expr*? a = self.parse_statement();
 			if(catch b = a)
 			{
 				switch(b)
@@ -280,4 +291,57 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 		break;
 	}
 	return expr;
+}
+
+
+fn Expr*? Parser.parse_binding(&self)
+{
+	TokenKind binding_type = self.peek()!.kind;
+	switch(binding_type) {
+		case LET..ALIAS:
+			self.advance()!;
+		default:
+			io::printn("No binding keyword");
+			return ast::INVALID_EXPRESSION~; 
+	}
+
+	Token identifier = self.advance()!;
+	if(identifier.kind != TokenKind.IDENTIFIER) {
+		io::printn("Identifier missing after binding");
+		return ast::INVALID_EXPRESSION~;
+	}
+
+	if(!self.follows(TokenKind.EQ)!) {
+		io::printn("= missing after binding");
+		return ast::INVALID_EXPRESSION~;
+	}
+
+	Expr* value = self.parse_expression()!;
+	
+	return mem::new(Expr, {
+		.kind = ExprKind.BINDING,
+		.binding = {
+			.type = binding_type,
+			.identifier = identifier,
+			.value = value 
+		}
+	});
+}
+
+fn Expr*? Parser.parse_assignment(&self)
+{
+	return ast::INVALID_EXPRESSION~;
+}
+
+fn Expr*? Parser.parse_statement(&self)
+{
+	if(try binding = self.parse_binding()) {
+		return binding;
+	}	
+
+	if(try assignment = self.parse_assignment()) {
+		return assignment;
+	}
+	
+	return ast::INVALID_EXPRESSION~;	
 }

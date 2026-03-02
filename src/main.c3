@@ -26,12 +26,11 @@ fn void int_loop() => @pool() {
         // read
         String line = io::treadline()!!;
 
-        List{Token} a;
-        a.init(tmem);
-        List{Token} tokens = lexer::lex(line, a);
+        Lexer lexer = lexer::new(tmem, line);
+        List{Token} tokens = lexer.analyze();
         // foreach(t:tokens)
         // {
-         // io::print(t);   
+        //  io::print(t);   
         // }
         
         Parser parser = parser::new(tmem, tokens);
