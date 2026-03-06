@@ -18,8 +18,8 @@ struct Parser
 	EnumMap{ TokenKind, _Operator_ } infix_ops;
 	List{ Token } tokens;
 
-	int start;
-	int current;
+	uint start;
+	uint current;
 }
 
 fn Parser new(Allocator allocator, List{ Token } tokens)
@@ -84,7 +84,7 @@ fn bool Parser.eot(&self) => self.current >= self.tokens.len();
 fn bool? Parser.follows(&self, TokenKind expect, bool skip_spaces = true)
 {
 	if(skip_spaces) self.skip_spaces();
-	return (self.peek()!.kind == expect) && self.current++;
+	return (self.peek()!.kind == expect) && ++self.current;
 } 
 fn void Parser.skip_spaces(&self)
 {
@@ -99,10 +99,10 @@ fn void Parser.parse(&self)
 {
 	mem::@scoped(self.allocator)
 	{
-		while(self.current < self.tokens.len())
+		// while(self.current < self.tokens.len())
 		{
 
-			Expr*? a = self.parse_statement();
+			Expr*? a = self.parse_function();
 			if(catch b = a)
 			{
 				switch(b)
@@ -158,24 +158,70 @@ fn Precedence? Parser.check_infix_op(&self, TokenKind tk, Precedence prec)
 }
 
 
+
+fn Expr*? Parser.parse_shell_call(&self, Token tk)
+{
+
+	List{ Expr* } args;
+	args.init(mem);
+	
+	while (self.follows(TokenKind.SPACE, false)!) {
+		
+		if (self.follows(TokenKind.OPEN_PHARANTESIS)!)
+		{
+			args.push(self.parse_expression()!);
+
+			if(!self.follows(TokenKind.CLOSED_PHARANTESIS)!) {
+				return ast::INVALID_EXPRESSION;
+			}
+
+			continue;
+		}
+
+		//if a terminator, break, else push the token 
+	
+			
+	}
+	
+	return mem::new(Expr, {
+		.kind = ExprKind.CALL,
+		.call = {
+			.callee = expr,
+			.args = args
+		}
+	});
+}
+
+
 fn Expr*? Parser.expr_head(&self)
 {
 	Token tk = self.advance()!;
-	
+
 	switch(tk.kind) {
 		//& literal
 		case INTEGER:
 		case FLOAT:
-			nextcase;
-		//& identifier
-		case IDENTIFIER:
 			return mem::new(Expr, {
 				.kind = ExprKind.PRIMARY,
 				.primary = {
 					.value = tk
 				}
-			});	
-		//& "(" , expression , ")"
+			});
+		//& identifier
+		//& shell_call 
+		case IDENTIFIER:
+			if(true) /* !is_inscope */ {
+				return mem::new(Expr, {
+					.kind = ExprKind.PRIMARY,
+					.primary = {
+						.value = tk
+					}
+				});
+			}
+	
+			return self.parse_shell_call(tk);		
+				
+		//& sub_expression 
 		case OPEN_PHARANTESIS:
 			Expr* expr = self.parse_expression()!;
 			if(!self.follows(CLOSED_PHARANTESIS)!)
@@ -201,9 +247,6 @@ fn Expr*? Parser.expr_head(&self)
 			return ast::INVALID_EXPRESSION~;
 	}
 }
-
-fn bool TokenKind.is_terminator(self) => self == TokenKind.SEMICOLON || self == TokenKind.NEW_LINE;
-
 
 fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 {
@@ -342,6 +385,93 @@ fn Expr*? Parser.parse_statement(&self)
 	if(try assignment = self.parse_assignment()) {
 		return assignment;
 	}
+
+	return self.parse_expression();
+}
+
+
+fn Expr*? Parser.parse_block(&self)
+{
 	
-	return ast::INVALID_EXPRESSION~;	
+	if(!self.follows(TokenKind.OPEN_BRACE)!) {
+		io::printn("No {");
+		return ast::INVALID_EXPRESSION~;
+	}
+
+	List{ Expr* } stmts;
+	stmts.init(mem);
+    
+
+	if(!self.follows(TokenKind.CLOSED_BRACE)!) {
+	 	do {
+          	stmts.push(self.parse_statement()!);
+        } while (self.follows(TokenKind.SEMICOLON)!);
+
+		
+		if(!self.follows(TokenKind.CLOSED_BRACE)!) {
+			io::printn("No }");
+			return ast::INVALID_EXPRESSION~;
+		}
+	}
+	
+	return mem::new(Expr, {
+		.kind = ExprKind.BLOCK,
+		.block = {
+			.stmts = stmts
+		}
+	});
+}
+
+fn void? Parser.parse_parameters(&self, List{ Token }* params)
+{
+	do {
+		Token tk = self.peek()!;
+		if(tk.kind != TokenKind.IDENTIFIER) {
+			return ast::INVALID_EXPRESSION~;
+		}
+		self.advance()!;
+		params.push(tk);
+	} while (self.follows(TokenKind.COMMA)!);
+}
+
+fn Expr*? Parser.parse_function(&self)
+{
+	if(!self.follows(TokenKind.FN)!) {
+		io::printn("Not a function");
+		return ast::INVALID_EXPRESSION~;
+	}
+	
+	Token identifier = self.advance()!;
+	if(identifier.kind != TokenKind.IDENTIFIER) {
+		io::printn("Function name missing");
+		return ast::INVALID_EXPRESSION~;
+	}
+
+	if(!self.follows(TokenKind.OPEN_PHARANTESIS)!) {
+		io::printn("No (");
+		return ast::INVALID_EXPRESSION~;
+	}
+
+	List{ Token } params;
+	params.init(mem);
+	
+	if(!self.follows(TokenKind.CLOSED_PHARANTESIS)!) {
+		self.parse_parameters(&params)!;
+
+		if(!self.follows(TokenKind.CLOSED_PHARANTESIS)!) {
+			io::printn("No )");
+			return ast::INVALID_EXPRESSION~;
+		}
+	}
+	
+	Expr* body = self.parse_block()!;	
+	
+	return mem::new(Expr, {
+		.kind = ExprKind.FUNCTION,
+		.fun = {
+			.identifier = identifier,
+			.params = params,
+			.body = body
+		}
+	});
 }

@@ -13,7 +13,9 @@ enum ExprKind
 	INFIX,
 	CALL,
 	INDEX,
-	BINDING
+	BINDING,
+	BLOCK,
+	FUNCTION
 }
 
 
@@ -53,7 +55,16 @@ struct Binding
     Token identifier;
     Expr* value;
 }
-
+struct Block
+{
+	List{ Expr* } stmts;
+}
+struct Function
+{
+	Token identifier;
+	List{ Token } params;
+	Expr* body;
+}
 
 struct Expr
 {
@@ -66,12 +77,15 @@ struct Expr
 		Call call;
 		Index index;
 		Binding binding;
+		Block block;
+		Function fun;
 	}
 }
 
 fn void Expr.print(&self)
 {
 	io::print(self.kind);
+	io::print(" (");
 	switch(self.kind)
 	{
 		case PRIMARY:
@@ -99,24 +113,33 @@ fn void Expr.print(&self)
 			io::print(") ");
 			break;
 		case CALL:
-			io::print(" (");
 			self.call.callee.print();
 			io::print(" ARGS: ");
 			foreach(arg : self.call.args) {
 				arg.print();
 			}
-			io::print(") ");
 		case INDEX:
-			io::print(" (");
 			self.index.object.print();
 			self.index.index.print();
-			io::print(") ");
 		case BINDING:
-			io::print(" (");
 			io::print(self.binding.type);
 			io::print(self.binding.identifier);
 			self.binding.value.print();
-			io::print(") ");
+			break;
+		case BLOCK:
+			foreach(stmt : self.block.stmts)
+			{
+				stmt.print();
+			}
+		case FUNCTION:
+			io::print(self.fun.identifier);
+			io::print("PARAMS ");
+			foreach(param : self.fun.params)
+			{
+				io::print(param);
+			}
+			self.fun.body.print();
 			break;
 	}
+	io::print(") ");
 }

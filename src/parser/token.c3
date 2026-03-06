@@ -2,7 +2,7 @@ module cyqra::lexer::token;
 
 enum TokenKind : int @public
 {
-     UNKNOWN,
+     RAW,
 
      /* Operators */
      PLUS, MINUS,
@@ -38,7 +38,9 @@ enum TokenKind : int @public
 
      /* keywords */
      LET, MUT, ENV, ALIAS,
-     IF, ELSE, WHILE,     
+     IF, ELSE, WHILE,
+     FN,
+          
      EOF,
 }
 

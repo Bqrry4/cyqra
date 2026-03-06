@@ -120,8 +120,7 @@ fn Token Lexer.lex_space(&self, char c)
      {
           switch (c) {
                case '\n': return self.mk_token(TokenKind.NEW_LINE);
-               case ' ' : return self.mk_token(TokenKind.SPACE);     
-               default: return self.mk_token(TokenKind.UNKNOWN);
+               default: return self.mk_token(TokenKind.SPACE);
           }
      }
 }
@@ -171,6 +170,7 @@ fn Token? Lexer.check_keywords(&self)
           case !libc::memcmp(self.tk_start, "mut", 3): return self.mk_token(TokenKind.MUT);
           case !libc::memcmp(self.tk_start, "env", 3): return self.mk_token(TokenKind.ENV);
           case !libc::memcmp(self.tk_start, "alias", 5): return self.mk_token(TokenKind.ALIAS);
+          case !libc::memcmp(self.tk_start, "fn", 2): return self.mk_token(TokenKind.FN);
           case !libc::memcmp(self.tk_start, "if", 2): return self.mk_token(TokenKind.IF);
           case !libc::memcmp(self.tk_start, "else", 2): return self.mk_token(TokenKind.ELSE);
           case !libc::memcmp(self.tk_start, "while", 5): return self.mk_token(TokenKind.WHILE);
