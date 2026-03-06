@@ -1,63 +1,83 @@
-/*---- Lexical ----*/
-digit ::= '0' | ... | '9';
-lower-case ::= 'a' | 'b' | 'c' | ... | 'x' | 'y' | 'z';
-upper-case ::= 'A' | 'B' | 'C' | ... | 'X' | 'Y' | 'Z';
-letter ::= upper-case | lower-case;
-number ::= digit , { digit };
+(*---- Lexical ----*)
+digit = '0' | ... | '9';
+lower-case = 'a' | 'b' | 'c' | ... | 'x' | 'y' | 'z';
+upper-case = 'A' | 'B' | 'C' | ... | 'X' | 'Y' | 'Z';
+letter = upper-case | lower-case;
+number = digit , { digit };
 
-char ::= "'" , ? ascii-char ? , "'" ;
-string ::= '"' , { ? any-char ? } , '"';
-bool ::= "true" | "false";
+char = "'" , ? ascii-char ? , "'" ;
+string = '"' , { ? any-char ? } , '"';
+bool = "true" | "false";
 
-literal ::= number
+literal = number
 	 	  | char
 		  | string
 		  | bool
 		  ; 
 
-/*---- Syntax ----*/
-comment ::= "//" , ? any-char ? , "\n"
+(*---- Syntax ----*)
+comment = "//" , ? any-char ? , "\n"
 		  | "/*" , ? any-char ? , "*/";
 
-identifier ::= letter , { letter | digit | "_" };
+identifier = letter , { letter | digit | "_" };
 
-binding ::= ("let" | "mut" | "env" | "alias") , identifier , "=" , expression;
+binding = ("let" | "mut" | "env" | "alias") , identifier , "=" , (expression | block);
 
-expression ::= expr_head , { expr_tail };
+(*
+	) -> enclosed in a sub_expression
+	} -> inside a block
+	\n or ; -> single line statemnt
+	| -> piping
+	&& or || as well
+*)
+raw_token = ? any-chars except the above tokens ?
 
-expr_head ::= literal
-		  | identifier
-		  | "(" , expression , ")"
+shell_call = identifier , { " " , (sub_expression | raw_token) };
+
+sub_expression = "(" , expression , ")";
+expression = expr_head , { expr_tail };
+
+expr_head = literal
+		  | identifier (* when identifier is a variable in the scope *)
+		  | shell_call
+		  | sub_expression
 		  | prefix_op , expression
 		  ;
 
-expr_tail ::= postfix_op
+expr_tail = postfix_op
 			| infix_op , expression
 			| "(" , [ argument_list ] , ")"
 			| "[" , expression , "]"
 			;
+argument = expression;
+argument_list = expression , { "," , expression };
 
-prefix_op  ::= "+" | "-" | "++" | "--" ;
-postfix_op ::= "++" | "--" ;
-/* Left to right associativity */
-infix_op   ::= "**"
+prefix_op  = "+" | "-" | "++" | "--" ;
+postfix_op = "++" | "--" ;
+infix_op   = "**"
 			 | "*" | "/" | "//" | "%"
 			 | "+" | "-"
 			 | "<<" | ">>"
 			 | "<" | "<=" | ">" | ">="
 			 | "==" | "!="
-			 | "&&&" | "^^^" | "|||"
+			 | "&&&" | "^^^" | "|||" (* <- tbd *)
 			 | "and" | "or"
 			 | "&&" | "||"
 			 ;
 
-assignment ::= identifier , assignment_op , expression;
-assignment_op ::= "="
+assignment = identifier , assignment_op , expression;
+assignment_op = "="
 				| "+=" | "-="
 				| "*=" | "/="
 				;
 
-stmt ::= (binding | assignment | expression);	
-stmt_separator ::= ";" | "\n";
+stmt = (binding | assignment | expression);	
+stmt_separator = ";" | "\n";
 
-stmt_list ::= stmt , { stmt_separator , stmt };
+stmt_list = stmt , { stmt_separator , stmt };
+
+block = "{" , [ stmt_list ] , "}";
+
+function = "fn" , identifier , "(" , [ parameters ] , ")" , block;
+lambda = "{" , "|" , [ parameters ]  , "|" , stmt_list , "}";
+parameters = identifier , { "," , identifier };
