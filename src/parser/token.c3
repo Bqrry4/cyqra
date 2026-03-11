@@ -40,7 +40,12 @@ enum TokenKind : int @public
      LET, MUT, ENV, ALIAS,
      IF, ELSE, WHILE,
      FN,
-          
+
+     /* string */
+     D_QUOTES, DOLLAR_SIGN,
+     STRING_PART, ESCAPED_CHAR,
+     INTERP_START, INTERP_END,
+     INTERP_IDENT,        
      EOF,
 }
 
