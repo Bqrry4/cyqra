@@ -4,11 +4,14 @@ import std::io;
 import std::ascii;
 import libc;
 
+faultdef REACHED_EOF;
+
 enum Mode
 {
      DEFAULT,
      STRING,
-     INTERPOLATION
+     INTERPOLATION,
+     RAW
 }
 
 struct Lexer
@@ -61,21 +64,36 @@ fn void Lexer.switch_back(&self)
 
 fn List{ Token } Lexer.analyze(&self)
 {
-     while (self.tk_current < (void*)self.source + self.source.len) {
-         self.next_token();
+     while (!self.eof()) {
+         if (catch self.next_token()) break;
      }
     
      return self.output;
 }
 
+
 <* Returns the character currently pointed by the @tk_current, then inc it *>
-fn char Lexer.advance(&self) => *(self.tk_current++);
-fn char Lexer.peek(&self, int n = 0) => *(self.tk_current + n);
-fn bool Lexer.follows(&self, char expect) => (self.peek() == expect) && self.tk_current++;
+fn char? Lexer.advance(&self)
+{
+     if(self.eof()) return REACHED_EOF~;
+     return *(self.tk_current++); 
+} 
+fn char? Lexer.peek(&self, int n = 0)
+{
+     if(self.eof(n)) return REACHED_EOF~;
+     return *(self.tk_current + n);  
+} 
+fn bool Lexer.follows(&self, char expect)
+{
+     char? c = self.peek();
+     if (catch c) return false;
+     return (c == expect) && self.tk_current++;
+} 
+fn bool Lexer.eof(&self, int n = 0) => (self.tk_current >= (void*)self.source + self.source.len + n);
 
 fn void Lexer.mk_token(&self, TokenKind kind)
 {
-      self.output.push({
+     self.output.push({
           .kind = kind,
           .value = (String)self.tk_start[
                ..self.tk_current - self.tk_start - 1
@@ -86,10 +104,10 @@ fn void Lexer.mk_token(&self, TokenKind kind)
 }
 
 
-fn void Lexer.next_token(&self)
+fn void? Lexer.next_token(&self)
 {
-     char c = self.advance();
-     switch (self.mode) {
+     char c = self.advance()!;
+     switch MODE: (self.mode) {
           case DEFAULT:
           case INTERPOLATION: switch(c) {
                case '+': self.follows('+') ? self.mk_token(PLUS_PLUS)
@@ -146,11 +164,25 @@ fn void Lexer.next_token(&self)
                     self.switch_to(STRING);              
                     self.mk_token(D_QUOTES);
                }                    
-               default: self.lex_unit(c); 
+              default: switch {
+                         case ascii::is_space_m(c): self.lex_space(c);
+                         case ascii::is_digit_m(c): self.lex_number()!;
+                         case is_identifier_char(c): self.lex_identifier()!;
+                         default: {
+                              self.switch_to(RAW);
+                              nextcase MODE: RAW;
+                         }
+               }
           }
-          case STRING: switch(c) {
+          case STRING:
+          case RAW: switch (c) {
                case '"': {
-                    self.switch_back();
+                    if (self.mode == STRING) {
+                         self.switch_back();
+                         self.mk_token(D_QUOTES);
+                         break;
+                    }
+                    self.switch_to(STRING);              
                     self.mk_token(D_QUOTES);
                }
                case '$': {              
@@ -160,26 +192,38 @@ fn void Lexer.next_token(&self)
                          break;
                     }
                     
-                    if (is_identifier_char(self.peek())) {     
+                    if (is_identifier_char(self.peek()!)) {     
                          self.mk_token(INTERP_IDENT);
-                         self.lex_identifier();
+                         self.lex_identifier()!;
+                    }                 
+               }
+               case ' ': {
+                    if (self.mode == RAW) {
+                         self.switch_back();
+                         io::printn(self.mode);
+                         nextcase MODE: DEFAULT;
                     }
-                    
-                    nextcase default;
                }
                case '\\':
-               default: self.lex_string_text();    
+               default: self.lex_string_text()!;    
           }    
      }
  }
 
-fn bool Lexer.is_string_breaker(&self)
+fn bool? Lexer.is_string_breaker(&self)
 {
-     char c = self.peek();
+     char c = self.peek()!;
 
      // Only a breaker when there's a possible identifier
-     if(c == '$') {
-          return is_identifier_char(self.peek(1));
+     if (c == '$') {
+          if (try sc = self.peek(1)) {
+               return is_identifier_char(sc);
+          }
+          return false;
+     }
+
+     if (self.mode == RAW) {
+          return ascii::is_space_m(c);          
      }
      
      return c == '\\' || c == '"'; 
@@ -190,28 +234,14 @@ fn bool is_identifier_char(char c)
      return ascii::is_alnum_m(c) || c == '_';
 }
 
-fn void Lexer.lex_unit(&self, char c)
+fn void? Lexer.lex_string_text(&self)
 {
-     switch {
-          case ascii::is_space_m(c): self.lex_space(c);
-          case ascii::is_digit_m(c): self.lex_number();
-          case is_identifier_char(c): self.lex_identifier();
-          default: self.lex_raw_token();
-      }
-}
+     defer self.mk_token(
+          (self.mode == RAW) ? TokenKind.RAW
+                             : TokenKind.STRING_PART
+     );
 
-fn void Lexer.lex_string_text(&self)
-{
-     while(!self.is_string_breaker()) self.advance();
-
-     self.mk_token(STRING_PART);
-}
-
-fn void Lexer.lex_raw_token(&self) {
-     //squash anything till a breaker
-     // like $ or "
-     // if so switch lex mode
-     // otherwise on space emit the token
+     while(!self.is_string_breaker()!) self.advance()!;
 }
 
 fn void Lexer.lex_space(&self, char c)
@@ -222,30 +252,30 @@ fn void Lexer.lex_space(&self, char c)
      }
 }
 
-fn void Lexer.lex_number(&self)
+fn void? Lexer.lex_number(&self)
 {
      TokenKind kind = INTEGER;
 
-     while (ascii::is_digit_m(self.peek())) self.advance();
+     defer self.mk_token(kind);
 
-     if (self.peek() == '.') {
-        kind = FLOAT;
-        self.advance();
-        while (ascii::is_digit_m(self.peek())) self.advance();
+     while (ascii::is_digit_m(self.peek()!)) self.advance()!;
+     if (self.peek()! == '.') {
+          kind = FLOAT;
+          self.advance()!;
+          while (ascii::is_digit_m(self.peek()!)) self.advance()!;
      }
-          
-     self.mk_token(kind);
 }
 
 
-fn void Lexer.lex_identifier(&self)
+fn void? Lexer.lex_identifier(&self)
 {
-     while(is_identifier_char(self.peek())) self.advance();
-     
-     if(catch self.check_keywords()) {
+   
+     defer if(catch self.check_keywords()) {
           self.mk_token(IDENTIFIER);
      }
-}
+
+     while(is_identifier_char(self.peek()!)) self.advance()!;
+  }
 
 fn void? Lexer.check_keywords(&self)
 {
