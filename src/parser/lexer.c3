@@ -14,6 +14,14 @@ enum Mode
      RAW
 }
 
+struct LexContext
+{
+     Mode mode;
+     union {
+          struct interp { uint brace_depth; }
+     }
+}
+
 struct Lexer
 {
      Allocator allocator;
@@ -24,19 +32,18 @@ struct Lexer
      char* tk_start;
      char* tk_current;
 
-     Mode mode;
-     List{ Mode } mode_stack;
-
-     <* Needed for interpolation *>
-     uint brace_depth;
+     List{ LexContext } ctxs;
 }
 
 fn Lexer new(Allocator allocator, String source) @public
 {
      List{ Token } tokens;
      tokens.init(allocator);
-     List{ Mode } stack;
-     stack.init(allocator);
+     List{ LexContext } ctxs;
+     ctxs.init(allocator);
+     ctxs.push({
+          .mode = DEFAULT
+     });
      
      return {
           .allocator = allocator,
@@ -44,23 +51,17 @@ fn Lexer new(Allocator allocator, String source) @public
           .output = tokens,
           .tk_start = source,
           .tk_current = source,
-          .mode = DEFAULT,
-          .mode_stack = stack,
-          .brace_depth = 0,
+          .ctxs = ctxs
      };
 }
 
 
-fn void Lexer.switch_to(&self, Mode mode)
-{
-     self.mode_stack.push(self.mode);
-     self.mode = mode;
-}
+fn void List{ LexContext }.switch_to(&self, Mode mode) => self.push({
+     .mode = mode
+});
+fn void List{ LexContext }.switch_back(&self) => self.pop()!!;
 
-fn void Lexer.switch_back(&self)
-{
-     self.mode = self.mode_stack.pop()!!;    
-}
+fn LexContext* Lexer.ctx(&self) => &self.ctxs[self.ctxs.len() - 1];
 
 fn List{ Token } Lexer.analyze(&self)
 {
@@ -107,7 +108,7 @@ fn void Lexer.mk_token(&self, TokenKind kind)
 fn void? Lexer.next_token(&self)
 {
      char c = self.advance()!;
-     switch MODE: (self.mode) {
+     switch MODE: (self.ctx().mode) {
           case DEFAULT:
           case INTERPOLATION: switch(c) {
                case '+': self.follows('+') ? self.mk_token(PLUS_PLUS)
@@ -137,31 +138,31 @@ fn void? Lexer.next_token(&self)
                case '[': self.mk_token(OPEN_BRACKET);
                case ']': self.mk_token(CLOSED_BRACKET);
                case '{': {
-                    if (self.mode != INTERPOLATION) {
+                    if (self.ctx().mode != INTERPOLATION) {
                             self.mk_token(OPEN_BRACE);
                     }
 
-                    self.brace_depth++;                  
+                    self.ctx().interp.brace_depth++;                  
                }
                case '}': {
-                    if (self.mode != INTERPOLATION) {
+                    if (self.ctx().mode != INTERPOLATION) {
                          self.mk_token(CLOSED_BRACE);
                          break;
                     }
 
-                    if (self.brace_depth == 0) {
+                    if (self.ctx().interp.brace_depth == 0) {
                          self.mk_token(INTERP_END);
-                         self.switch_back();
+                         self.ctxs.switch_back();
                          break;
                     }
 
-                    self.brace_depth--;
+                    self.ctx().interp.brace_depth--;
                }
                case ';': self.mk_token(SEMICOLON);
                case ',': self.mk_token(COMMA);
                case '\0': self.mk_token(EOF);
                case '"': {
-                    self.switch_to(STRING);              
+                    self.ctxs.switch_to(STRING);              
                     self.mk_token(D_QUOTES);
                }                    
               default: switch {
@@ -169,7 +170,7 @@ fn void? Lexer.next_token(&self)
                          case ascii::is_digit_m(c): self.lex_number()!;
                          case is_identifier_char(c): self.lex_identifier()!;
                          default: {
-                              self.switch_to(RAW);
+                              self.ctxs.switch_to(RAW);
                               nextcase MODE: RAW;
                          }
                }
@@ -177,18 +178,18 @@ fn void? Lexer.next_token(&self)
           case STRING:
           case RAW: switch (c) {
                case '"': {
-                    if (self.mode == STRING) {
-                         self.switch_back();
+                    if (self.ctx().mode == STRING) {
+                         self.ctxs.switch_back();
                          self.mk_token(D_QUOTES);
                          break;
                     }
-                    self.switch_to(STRING);              
+                    self.ctxs.switch_to(STRING);              
                     self.mk_token(D_QUOTES);
                }
                case '$': {              
                     if (self.follows('{')) {
                          self.mk_token(INTERP_START);
-                         self.switch_to(INTERPOLATION);
+                         self.ctxs.switch_to(INTERPOLATION);
                          break;
                     }
                     
@@ -198,9 +199,8 @@ fn void? Lexer.next_token(&self)
                     }                 
                }
                case ' ': {
-                    if (self.mode == RAW) {
-                         self.switch_back();
-                         io::printn(self.mode);
+                    if (self.ctx().mode == RAW) {
+                         self.ctxs.switch_back();
                          nextcase MODE: DEFAULT;
                     }
                }
@@ -222,7 +222,7 @@ fn bool? Lexer.is_string_breaker(&self)
           return false;
      }
 
-     if (self.mode == RAW) {
+     if (self.ctx().mode == RAW) {
           return ascii::is_space_m(c);          
      }
      
@@ -237,7 +237,7 @@ fn bool is_identifier_char(char c)
 fn void? Lexer.lex_string_text(&self)
 {
      defer self.mk_token(
-          (self.mode == RAW) ? TokenKind.RAW
+          (self.ctx().mode == RAW) ? TokenKind.RAW
                              : TokenKind.STRING_PART
      );
 
@@ -286,7 +286,7 @@ fn void? Lexer.check_keywords(&self)
           case !libc::memcmp(self.tk_start, "alias", 5): self.mk_token(ALIAS);
           case !libc::memcmp(self.tk_start, "fn", 2): self.mk_token(FN);
           case !libc::memcmp(self.tk_start, "if", 2): self.mk_token(IF);
-          case !libc::memcmp(self.tk_start, "else", 2): self.mk_token(ELSE);
+          case !libc::memcmp(self.tk_start, "else", 4): self.mk_token(ELSE);
           case !libc::memcmp(self.tk_start, "while", 5): self.mk_token(WHILE);
           default: return NOT_FOUND~;
      }
