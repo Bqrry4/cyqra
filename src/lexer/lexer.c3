@@ -4,8 +4,6 @@ import std::io;
 import std::ascii;
 import libc;
 
-faultdef REACHED_EOF;
-
 enum Mode
 {
      DEFAULT,
@@ -29,9 +27,7 @@ struct Lexer
      String source;
      List{ Token } output;
 
-     char* tk_start;
-     char* tk_current;
-
+     Cursor cursor;
      List{ LexContext } ctxs;
 }
 
@@ -49,8 +45,11 @@ fn Lexer new(Allocator allocator, String source) @public
           .allocator = allocator,
           .source = source,
           .output = tokens,
-          .tk_start = source,
-          .tk_current = source,
+          .cursor = {
+               .start = source,
+               .current = source,
+               .end = (char*)source + source.len
+          },
           .ctxs = ctxs
      };
 }
@@ -65,73 +64,53 @@ fn LexContext* Lexer.ctx(&self) => &self.ctxs[self.ctxs.len() - 1];
 
 fn List{ Token } Lexer.analyze(&self)
 {
-     while (!self.eof()) {
+     while (!self.cursor.eof()) {
          if (catch self.next_token()) break;
      }
     
      return self.output;
 }
 
-
-<* Returns the character currently pointed by the @tk_current, then inc it *>
-fn char? Lexer.advance(&self)
-{
-     if(self.eof()) return REACHED_EOF~;
-     return *(self.tk_current++); 
-} 
-fn char? Lexer.peek(&self, int n = 0)
-{
-     if(self.eof(n)) return REACHED_EOF~;
-     return *(self.tk_current + n);  
-} 
-fn bool Lexer.follows(&self, char expect)
-{
-     char? c = self.peek();
-     if (catch c) return false;
-     return (c == expect) && self.tk_current++;
-} 
-fn bool Lexer.eof(&self, int n = 0) => (self.tk_current >= (void*)self.source + self.source.len + n);
-
+ 
 fn void Lexer.mk_token(&self, TokenKind kind)
 {
+     String lexeme = self.cursor.captured();
      self.output.push({
           .kind = kind,
-          .value = (String)self.tk_start[
-               ..self.tk_current - self.tk_start - 1
-          ]
+          .value = lexeme
      });
-     
-     self.tk_start = self.tk_current;
+
+     self.cursor.sync_start();
 }
 
 
 fn void? Lexer.next_token(&self)
 {
-     char c = self.advance()!;
+     char c = self.cursor.advance()!;
      switch MODE: (self.ctx().mode) {
           case DEFAULT:
           case INTERPOLATION: switch(c) {
-               case '+': self.follows('+') ? self.mk_token(PLUS_PLUS)
-                         : self.follows('=') ? self.mk_token(PLUS_ASGN)
+               case '+': self.cursor.follows('+') ? self.mk_token(PLUS_PLUS)
+                         : self.cursor.follows('=') ? self.mk_token(PLUS_ASGN)
                                              : self.mk_token(PLUS);
-               case '-': self.follows('-') ? self.mk_token(MINUS_MINUS)
-                         : self.follows('=') ? self.mk_token(MINUS_ASGN)
+               case '-': self.cursor.follows('-') ? self.mk_token(MINUS_MINUS)
+                         : self.cursor.follows('=') ? self.mk_token(MINUS_ASGN)
                                              : self.mk_token(MINUS);
-               case '*': self.follows('*') ? self.mk_token(STAR_STAR)
-                         : self.follows('=') ? self.mk_token(STAR_ASGN)
+               case '*': self.cursor.follows('*') ? self.mk_token(STAR_STAR)
+                         : self.cursor.follows('=') ? self.mk_token(STAR_ASGN)
                                              : self.mk_token(STAR);
-               case '/': self.follows('=') ? self.mk_token(SLASH_ASGN)
+               case '/': self.cursor.follows('=') ? self.mk_token(SLASH_ASGN)
                                            : self.mk_token(SLASH);
                case '%': self.mk_token(PERCENT);
-               case '|': self.follows('@') ? self.mk_token(PIPE_ALL)
+               case '|': self.cursor.follows('@') ? self.mk_token(PIPE_ALL)
                                            : self.mk_token(PIPE);
-               case '<': self.follows('=') ? self.mk_token(LTE)
+               case '<': self.cursor.follows('=') ? self.mk_token(LTE)
                                            : self.mk_token(LT);
-               case '>': self.follows('=') ? self.mk_token(GTE)
+               case '>': self.cursor.follows('=') ? self.mk_token(GTE)
                                            : self.mk_token(GT);
-               case '=': self.follows('=') ? self.mk_token(ASGN)
+               case '=': self.cursor.follows('=') ? self.mk_token(ASGN)
                                            : self.mk_token(EQ);
-               case '!': self.follows('=') ? self.mk_token(NEQ)
+               case '!': self.cursor.follows('=') ? self.mk_token(NEQ)
                                            : self.mk_token(EXCLAMATION);
                case '(': self.mk_token(OPEN_PHARANTESIS);
                case ')': self.mk_token(CLOSED_PHARANTESIS);
@@ -187,13 +166,13 @@ fn void? Lexer.next_token(&self)
                     self.mk_token(D_QUOTES);
                }
                case '$': {              
-                    if (self.follows('{')) {
+                    if (self.cursor.follows('{')) {
                          self.mk_token(INTERP_START);
                          self.ctxs.switch_to(INTERPOLATION);
                          break;
                     }
                     
-                    if (is_identifier_char(self.peek()!)) {     
+                    if (is_identifier_char(self.cursor.peek()!)) {     
                          self.mk_token(INTERP_IDENT);
                          self.lex_identifier()!;
                     }                 
@@ -212,11 +191,11 @@ fn void? Lexer.next_token(&self)
 
 fn bool? Lexer.is_string_breaker(&self)
 {
-     char c = self.peek()!;
+     char c = self.cursor.peek()!;
 
      // Only a breaker when there's a possible identifier
      if (c == '$') {
-          if (try sc = self.peek(1)) {
+          if (try sc = self.cursor.peek(1)) {
                return is_identifier_char(sc);
           }
           return false;
@@ -241,7 +220,7 @@ fn void? Lexer.lex_string_text(&self)
                              : TokenKind.STRING_PART
      );
 
-     while(!self.is_string_breaker()!) self.advance()!;
+     while(!self.is_string_breaker()!) self.cursor.advance()!;
 }
 
 fn void Lexer.lex_space(&self, char c)
@@ -258,11 +237,11 @@ fn void? Lexer.lex_number(&self)
 
      defer self.mk_token(kind);
 
-     while (ascii::is_digit_m(self.peek()!)) self.advance()!;
-     if (self.peek()! == '.') {
+     while (ascii::is_digit_m(self.cursor.peek()!)) self.cursor.advance()!;
+     if (self.cursor.peek()! == '.') {
           kind = FLOAT;
-          self.advance()!;
-          while (ascii::is_digit_m(self.peek()!)) self.advance()!;
+          self.cursor.advance()!;
+          while (ascii::is_digit_m(self.cursor.peek()!)) self.cursor.advance()!;
      }
 }
 
@@ -274,20 +253,20 @@ fn void? Lexer.lex_identifier(&self)
           self.mk_token(IDENTIFIER);
      }
 
-     while(is_identifier_char(self.peek()!)) self.advance()!;
+     while(is_identifier_char(self.cursor.peek()!)) self.cursor.advance()!;
   }
 
 fn void? Lexer.check_keywords(&self)
 {
      switch {
-          case !libc::memcmp(self.tk_start, "let", 3): self.mk_token(LET);
-          case !libc::memcmp(self.tk_start, "mut", 3): self.mk_token(MUT);
-          case !libc::memcmp(self.tk_start, "env", 3): self.mk_token(ENV);
-          case !libc::memcmp(self.tk_start, "alias", 5): self.mk_token(ALIAS);
-          case !libc::memcmp(self.tk_start, "fn", 2): self.mk_token(FN);
-          case !libc::memcmp(self.tk_start, "if", 2): self.mk_token(IF);
-          case !libc::memcmp(self.tk_start, "else", 4): self.mk_token(ELSE);
-          case !libc::memcmp(self.tk_start, "while", 5): self.mk_token(WHILE);
+          case !libc::memcmp(self.cursor.start, "let", 3): self.mk_token(LET);
+          case !libc::memcmp(self.cursor.start, "mut", 3): self.mk_token(MUT);
+          case !libc::memcmp(self.cursor.start, "env", 3): self.mk_token(ENV);
+          case !libc::memcmp(self.cursor.start, "alias", 5): self.mk_token(ALIAS);
+          case !libc::memcmp(self.cursor.start, "fn", 2): self.mk_token(FN);
+          case !libc::memcmp(self.cursor.start, "if", 2): self.mk_token(IF);
+          case !libc::memcmp(self.cursor.start, "else", 4): self.mk_token(ELSE);
+          case !libc::memcmp(self.cursor.start, "while", 5): self.mk_token(WHILE);
           default: return NOT_FOUND~;
      }
 }
