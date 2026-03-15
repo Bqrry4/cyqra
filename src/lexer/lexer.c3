@@ -70,9 +70,8 @@ fn List{ Token } Lexer.analyze(&self)
     
      return self.output;
 }
-
  
-fn void Lexer.mk_token(&self, TokenKind kind)
+fn void Lexer.emit(&self, TokenKind kind)
 {
      String lexeme = self.cursor.captured();
      self.output.push({
@@ -87,107 +86,120 @@ fn void Lexer.mk_token(&self, TokenKind kind)
 fn void? Lexer.next_token(&self)
 {
      char c = self.cursor.advance()!;
-     switch MODE: (self.ctx().mode) {
+     switch (self.ctx().mode) {
           case DEFAULT:
-          case INTERPOLATION: switch(c) {
-               case '+': self.cursor.follows('+') ? self.mk_token(PLUS_PLUS)
-                         : self.cursor.follows('=') ? self.mk_token(PLUS_ASGN)
-                                             : self.mk_token(PLUS);
-               case '-': self.cursor.follows('-') ? self.mk_token(MINUS_MINUS)
-                         : self.cursor.follows('=') ? self.mk_token(MINUS_ASGN)
-                                             : self.mk_token(MINUS);
-               case '*': self.cursor.follows('*') ? self.mk_token(STAR_STAR)
-                         : self.cursor.follows('=') ? self.mk_token(STAR_ASGN)
-                                             : self.mk_token(STAR);
-               case '/': self.cursor.follows('=') ? self.mk_token(SLASH_ASGN)
-                                           : self.mk_token(SLASH);
-               case '%': self.mk_token(PERCENT);
-               case '|': self.cursor.follows('@') ? self.mk_token(PIPE_ALL)
-                                           : self.mk_token(PIPE);
-               case '<': self.cursor.follows('=') ? self.mk_token(LTE)
-                                           : self.mk_token(LT);
-               case '>': self.cursor.follows('=') ? self.mk_token(GTE)
-                                           : self.mk_token(GT);
-               case '=': self.cursor.follows('=') ? self.mk_token(ASGN)
-                                           : self.mk_token(EQ);
-               case '!': self.cursor.follows('=') ? self.mk_token(NEQ)
-                                           : self.mk_token(EXCLAMATION);
-               case '(': self.mk_token(OPEN_PHARANTESIS);
-               case ')': self.mk_token(CLOSED_PHARANTESIS);
-               case '[': self.mk_token(OPEN_BRACKET);
-               case ']': self.mk_token(CLOSED_BRACKET);
-               case '{': {
-                    if (self.ctx().mode != INTERPOLATION) {
-                            self.mk_token(OPEN_BRACE);
-                    }
-
-                    self.ctx().interp.brace_depth++;                  
-               }
-               case '}': {
-                    if (self.ctx().mode != INTERPOLATION) {
-                         self.mk_token(CLOSED_BRACE);
-                         break;
-                    }
-
-                    if (self.ctx().interp.brace_depth == 0) {
-                         self.mk_token(INTERP_END);
-                         self.ctxs.switch_back();
-                         break;
-                    }
-
-                    self.ctx().interp.brace_depth--;
-               }
-               case ';': self.mk_token(SEMICOLON);
-               case ',': self.mk_token(COMMA);
-               case '\0': self.mk_token(EOF);
-               case '"': {
-                    self.ctxs.switch_to(STRING);              
-                    self.mk_token(D_QUOTES);
-               }                    
-              default: switch {
-                         case ascii::is_space_m(c): self.lex_space(c);
-                         case ascii::is_digit_m(c): self.lex_number()!;
-                         case is_identifier_char(c): self.lex_identifier()!;
-                         default: {
-                              self.ctxs.switch_to(RAW);
-                              nextcase MODE: RAW;
-                         }
-               }
-          }
+          case INTERPOLATION:
+               self.lex_code(c)!;  
           case STRING:
-          case RAW: switch (c) {
-               case '"': {
-                    if (self.ctx().mode == STRING) {
-                         self.ctxs.switch_back();
-                         self.mk_token(D_QUOTES);
-                         break;
-                    }
-                    self.ctxs.switch_to(STRING);              
-                    self.mk_token(D_QUOTES);
-               }
-               case '$': {              
-                    if (self.cursor.follows('{')) {
-                         self.mk_token(INTERP_START);
-                         self.ctxs.switch_to(INTERPOLATION);
-                         break;
-                    }
-                    
-                    if (is_identifier_char(self.cursor.peek()!)) {     
-                         self.mk_token(INTERP_IDENT);
-                         self.lex_identifier()!;
-                    }                 
-               }
-               case ' ': {
-                    if (self.ctx().mode == RAW) {
-                         self.ctxs.switch_back();
-                         nextcase MODE: DEFAULT;
-                    }
-               }
-               case '\\':
-               default: self.lex_string_text()!;    
-          }    
+          case RAW:
+               self.lex_text(c)!;
      }
  }
+
+fn void? Lexer.lex_code(&self, char c)
+{
+     switch(c) {
+          case '+': self.cursor.follows('+') ? self.emit(PLUS_PLUS)
+                    : self.cursor.follows('=') ? self.emit(PLUS_ASGN)
+                                             : self.emit(PLUS);
+          case '-': self.cursor.follows('-') ? self.emit(MINUS_MINUS)
+                    : self.cursor.follows('=') ? self.emit(MINUS_ASGN)
+                                        : self.emit(MINUS);
+          case '*': self.cursor.follows('*') ? self.emit(STAR_STAR)
+                    : self.cursor.follows('=') ? self.emit(STAR_ASGN)
+                                        : self.emit(STAR);
+          case '/': self.cursor.follows('=') ? self.emit(SLASH_ASGN)
+                                      : self.emit(SLASH);
+          case '%': self.emit(PERCENT);
+          case '|': self.cursor.follows('@') ? self.emit(PIPE_ALL)
+                                      : self.emit(PIPE);
+          case '<': self.cursor.follows('=') ? self.emit(LTE)
+                                      : self.emit(LT);
+          case '>': self.cursor.follows('=') ? self.emit(GTE)
+                                      : self.emit(GT);
+          case '=': self.cursor.follows('=') ? self.emit(ASGN)
+                                      : self.emit(EQ);
+          case '!': self.cursor.follows('=') ? self.emit(NEQ)
+                                      : self.emit(EXCLAMATION);
+          case '(': self.emit(OPEN_PHARANTESIS);
+          case ')': self.emit(CLOSED_PHARANTESIS);
+          case '[': self.emit(OPEN_BRACKET);
+          case ']': self.emit(CLOSED_BRACKET);
+          case '{': {
+               if (self.ctx().mode != INTERPOLATION) {
+                       self.emit(OPEN_BRACE);
+               }
+
+               self.ctx().interp.brace_depth++;                  
+          }
+          case '}': {
+               if (self.ctx().mode != INTERPOLATION) {
+                    self.emit(CLOSED_BRACE);
+                    break;
+               }
+
+               if (self.ctx().interp.brace_depth == 0) {
+                    self.emit(INTERP_END);
+                    self.ctxs.switch_back();
+                    break;
+               }
+
+               self.ctx().interp.brace_depth--;
+          }
+          case ';': self.emit(SEMICOLON);
+          case ',': self.emit(COMMA);
+          case '\0': self.emit(EOF);
+          case '"': {
+               self.ctxs.switch_to(STRING);              
+               self.emit(D_QUOTES);
+          }                    
+          default: switch {
+               case ascii::is_space_m(c): self.lex_space(c);
+               case ascii::is_digit_m(c): self.lex_number()!;
+               case is_identifier_char(c): self.lex_identifier()!;
+               default: {
+                    self.ctxs.switch_to(RAW);
+                    self.lex_text(c)!;
+               }
+          }
+     }
+}
+
+fn void? Lexer.lex_text(&self, char c)
+{
+     switch (c) {
+          case '"': {
+               if (self.ctx().mode == STRING) {
+                    self.ctxs.switch_back();
+                    self.emit(D_QUOTES);
+                    break;
+               }
+               self.ctxs.switch_to(STRING);              
+               self.emit(D_QUOTES);
+          }
+          case '$': {              
+               if (self.cursor.follows('{')) {
+                    self.emit(INTERP_START);
+                    self.ctxs.switch_to(INTERPOLATION);
+                    break;
+               }
+               
+               if (is_identifier_char(self.cursor.peek()!)) {     
+                    self.emit(INTERP_IDENT);
+                    self.lex_identifier()!;
+               }                 
+          }
+          case ' ': {
+               if (self.ctx().mode == RAW) {
+                    self.ctxs.switch_back();
+                    self.lex_code(c)!;
+               }
+          }
+          case '\\':
+          default: self.lex_string_text()!;    
+     }
+}
+
 
 fn bool? Lexer.is_string_breaker(&self)
 {
@@ -215,9 +227,9 @@ fn bool is_identifier_char(char c)
 
 fn void? Lexer.lex_string_text(&self)
 {
-     defer self.mk_token(
+     defer self.emit(
           (self.ctx().mode == RAW) ? TokenKind.RAW
-                             : TokenKind.STRING_PART
+                                   : TokenKind.STRING_PART
      );
 
      while(!self.is_string_breaker()!) self.cursor.advance()!;
@@ -226,8 +238,8 @@ fn void? Lexer.lex_string_text(&self)
 fn void Lexer.lex_space(&self, char c)
 {
      switch (c) {
-          case '\n': self.mk_token(NEW_LINE);
-          default: self.mk_token(SPACE);
+          case '\n': self.emit(NEW_LINE);
+          default: self.emit(SPACE);
      }
 }
 
@@ -235,7 +247,7 @@ fn void? Lexer.lex_number(&self)
 {
      TokenKind kind = INTEGER;
 
-     defer self.mk_token(kind);
+     defer self.emit(kind);
 
      while (ascii::is_digit_m(self.cursor.peek()!)) self.cursor.advance()!;
      if (self.cursor.peek()! == '.') {
@@ -248,25 +260,11 @@ fn void? Lexer.lex_number(&self)
 
 fn void? Lexer.lex_identifier(&self)
 {
-   
-     defer if(catch self.check_keywords()) {
-          self.mk_token(IDENTIFIER);
-     }
-
+     defer self.emit(
+          check_keywords(self.cursor.captured())
+     );
+     
      while(is_identifier_char(self.cursor.peek()!)) self.cursor.advance()!;
-  }
-
-fn void? Lexer.check_keywords(&self)
-{
-     switch {
-          case !libc::memcmp(self.cursor.start, "let", 3): self.mk_token(LET);
-          case !libc::memcmp(self.cursor.start, "mut", 3): self.mk_token(MUT);
-          case !libc::memcmp(self.cursor.start, "env", 3): self.mk_token(ENV);
-          case !libc::memcmp(self.cursor.start, "alias", 5): self.mk_token(ALIAS);
-          case !libc::memcmp(self.cursor.start, "fn", 2): self.mk_token(FN);
-          case !libc::memcmp(self.cursor.start, "if", 2): self.mk_token(IF);
-          case !libc::memcmp(self.cursor.start, "else", 4): self.mk_token(ELSE);
-          case !libc::memcmp(self.cursor.start, "while", 5): self.mk_token(WHILE);
-          default: return NOT_FOUND~;
-     }
 }
+
+
