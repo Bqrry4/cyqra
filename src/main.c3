@@ -1,9 +1,11 @@
 module cyqra;
 import std::io;
 import std::os;
+import std::collections::list;
+
 import cyqra::lexer;
 import cyqra::parser;
-import std::collections::list;
+import cyqra::interpreter;
 
 fn String[] parse(String *line)
 {
@@ -30,14 +32,15 @@ fn void int_loop() => @pool() {
         List{Token} tokens = lexer.analyze();
         // foreach(t:tokens)
         // {
-        //  io::print(t);   
+        //     io::print(t);   
         // }
         
         Parser parser = parser::new(tmem, tokens);
         parser.parse();
-        // execute
-        // exec(args);          
-    }
+
+        Interpreter interpreter = interpreter::new(parser.ast);
+        interpreter.interpret();
+   }
 }
 
 fn int main()

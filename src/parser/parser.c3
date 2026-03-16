@@ -8,6 +8,8 @@ import cyqra::lexer;
 
 alias _Operator_ = Maybe{ Operator };
 
+faultdef OUT_OF_TOKENS;
+
 struct Parser
 {
 	Allocator allocator;
@@ -16,8 +18,10 @@ struct Parser
 	EnumMap{ TokenKind, _Operator_ } prefix_ops;
 	EnumMap{ TokenKind, _Operator_ } postfix_ops;
 	EnumMap{ TokenKind, _Operator_ } infix_ops;
-	List{ Token } tokens;
 
+	List{ Token } tokens;
+	Ast ast;
+	
 	uint start;
 	uint current;
 }
@@ -52,9 +56,12 @@ fn Parser new(Allocator allocator, List{ Token } tokens)
 	infix_ops[PLUS] = maybe::value({11, LEFT});
 	infix_ops[MINUS] = maybe::value({11, LEFT});
 
+	Ast ast = ast::new(allocator);
+
 	return {
 		.allocator = allocator,
 		.tokens = tokens,
+		.ast = ast,
 		.prefix_ops = prefix_ops,
 		.postfix_ops = postfix_ops,
 		.infix_ops = infix_ops
@@ -65,8 +72,6 @@ fn void Parser.free(&self)
 {
 	//!TODO
 }
-
-faultdef OUT_OF_TOKENS;
 
 fn Token? Parser.advance(&self, bool skip_spaces = true)
 {
@@ -88,8 +93,7 @@ fn bool? Parser.follows(&self, TokenKind expect, bool skip_spaces = true)
 } 
 fn void Parser.skip_spaces(&self)
 {
-	
-	while(!self.eot() &&
+	while (!self.eot() &&
 		 (self.tokens[self.current].kind == TokenKind.SPACE ||
 		  self.tokens[self.current].kind == TokenKind.NEW_LINE)) {
 			self.current++;
@@ -99,25 +103,17 @@ fn void Parser.parse(&self)
 {
 	mem::@scoped(self.allocator)
 	{
-		// while(self.current < self.tokens.len())
+		while(!self.eot())
 		{
-
-			Expr*? a = self.parse_function();
-			if(catch b = a)
-			{
-				switch(b)
-				{
-					case OUT_OF_TOKENS:
-						io::printn("Unexpected end of expression");
-					case ast::INVALID_EXPRESSION:
-						io::printn("invalid expr");
-					default:
-						break;
-				}
-				
+			if (try expr = self.parse_function()) {
+				self.ast.expressions.push(expr);
+				continue;		
 			}
-			(void)a.print();
-			io::printn();
+
+			if (try expr = self.parse_statement()) {
+				self.ast.expressions.push(expr);
+				continue;
+			}
 		}
 	};
 	
@@ -158,7 +154,7 @@ fn Precedence? Parser.check_infix_op(&self, TokenKind tk, Precedence prec)
 }
 
 
-
+//! TBD
 fn Expr*? Parser.parse_shell_call(&self, Token tk)
 {
 
@@ -172,7 +168,7 @@ fn Expr*? Parser.parse_shell_call(&self, Token tk)
 			args.push(self.parse_expression()!);
 
 			if(!self.follows(TokenKind.CLOSED_PHARANTESIS)!) {
-				return ast::INVALID_EXPRESSION;
+				return ast::INVALID_EXPRESSION~;
 			}
 
 			continue;
@@ -183,13 +179,14 @@ fn Expr*? Parser.parse_shell_call(&self, Token tk)
 			
 	}
 	
-	return mem::new(Expr, {
-		.kind = ExprKind.CALL,
-		.call = {
-			.callee = expr,
-			.args = args
-		}
-	});
+	// return mem::new(Expr, {
+	// 	.kind = ExprKind.CALL,
+	// 	.call = {
+	// 		.callee = expr,
+	// 		.args = args
+	// 	}
+	// });
+	return ast::INVALID_EXPRESSION~;
 }
 
 
@@ -204,7 +201,7 @@ fn Expr*? Parser.expr_head(&self)
 			return mem::new(Expr, {
 				.kind = ExprKind.PRIMARY,
 				.primary = {
-					.value = tk
+					.token = tk
 				}
 			});
 		//& identifier
@@ -214,7 +211,7 @@ fn Expr*? Parser.expr_head(&self)
 				return mem::new(Expr, {
 					.kind = ExprKind.PRIMARY,
 					.primary = {
-						.value = tk
+						.token = tk
 					}
 				});
 			}
@@ -344,7 +341,7 @@ fn Expr*? Parser.parse_binding(&self)
 		case LET..ALIAS:
 			self.advance()!;
 		default:
-			io::printn("No binding keyword");
+			// io::printn("No binding keyword");
 			return ast::INVALID_EXPRESSION~; 
 	}
 
@@ -437,7 +434,7 @@ fn void? Parser.parse_parameters(&self, List{ Token }* params)
 fn Expr*? Parser.parse_function(&self)
 {
 	if(!self.follows(TokenKind.FN)!) {
-		io::printn("Not a function");
+		// io::printn("Not a function");
 		return ast::INVALID_EXPRESSION~;
 	}
 	

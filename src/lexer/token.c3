@@ -50,10 +50,9 @@ enum TokenKind : int @public
 }
 
 
-struct Token @public
+struct Token
 {
      TokenKind kind;
-     // A slice over the big string
-     String value;        
+     String slice;        
 }
 

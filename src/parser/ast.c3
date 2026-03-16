@@ -5,6 +5,22 @@ import std::collections::list;
 
 faultdef INVALID_EXPRESSION;
 
+struct Ast
+{
+	Allocator allocator;
+	List{ Expr* } expressions;	
+}
+
+fn Ast new(Allocator allocator)
+{
+	List{ Expr* } expressions;
+	expressions.init(allocator);
+	return {
+		.allocator = allocator,
+		.expressions = expressions
+	};
+}
+
 enum ExprKind
 {
 	PRIMARY,
@@ -18,10 +34,9 @@ enum ExprKind
 	FUNCTION
 }
 
-
 struct Primary
 {
-	Token value;
+	Token token;
 }
 struct Prefix
 {
@@ -89,7 +104,7 @@ fn void Expr.print(&self)
 	switch(self.kind)
 	{
 		case PRIMARY:
-			io::print(self.primary.value);
+			io::print(self.primary.token);
 			break;
 		case PREFIX:
 			io::print(self.prefix.op);

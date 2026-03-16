@@ -76,7 +76,7 @@ fn void Lexer.emit(&self, TokenKind kind)
      String lexeme = self.cursor.captured();
      self.output.push({
           .kind = kind,
-          .value = lexeme
+          .slice = lexeme
      });
 
      self.cursor.sync_start();
