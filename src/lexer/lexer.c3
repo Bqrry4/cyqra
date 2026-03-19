@@ -148,6 +148,9 @@ fn void? Lexer.lex_code(&self, char c)
           }
           case ';': self.emit(SEMICOLON);
           case ',': self.emit(COMMA);
+          case '.': self.cursor.follows('.') ?
+                    (self.cursor.follows('.') ? self.emit(DOTX3) : self.emit(DOTX2))
+                    : self.emit(DOT);
           case '\0': self.emit(EOF);
           case '"': {
                self.ctxs.switch_to(STRING);              
@@ -205,10 +208,10 @@ fn bool? Lexer.is_string_breaker(&self)
 {
      char c = self.cursor.peek()!;
 
-     // Only a breaker when there's a possible identifier
+     // Only a breaker when there's a possible identifier or start of a block" 
      if (c == '$') {
           if (try sc = self.cursor.peek(1)) {
-               return is_identifier_char(sc);
+               return sc == '{' || is_identifier_char(sc);
           }
           return false;
      }
