@@ -15,14 +15,13 @@ fn String[] parse(String *line)
 fn void exec(String[] args)
 {
     SubProcess? child = std::os::process::create(args, { .inherit_stdio = true });
-    if (catch err = child)
-    {
+    if (catch err = child) {
         io::printn("err");
     }
     (void)child.join();
 }
 
-fn void int_loop() => @pool()
+fn void interactive() => @pool()
 {
     Interpreter interpreter = interpreter::new(tmem);
 
@@ -45,9 +44,29 @@ fn void int_loop() => @pool()
    }
 }
 
-fn int main()
+fn void from_file(String content)
 {
-    int_loop();
+    
+    Lexer lexer = lexer::new(tmem, content);
+    List{Token} tokens = lexer.analyze();
 
+    Parser parser = parser::new(tmem, tokens);
+    parser.parse();
+
+    Interpreter interpreter = interpreter::new(tmem);
+    interpreter.interpret(parser.ast);
+}
+
+fn int main(String[] args)
+{
+    if(args.len == 2) {
+        String s_path = args[1];
+        char[]? file = file::load(tmem, s_path);
+        from_file((String)file!!);
+    }
+    else {
+        interactive();
+    }
+    
     return 0;
 }

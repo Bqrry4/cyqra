@@ -31,7 +31,9 @@ fn void Interpreter.interpret(&self, Ast ast)
 {
 	foreach (expr: ast.expressions) {
 		Value val = self.eval(expr);
-		val.print();		
+		String s_val = val.to_string(self.allocator);
+		io::printn(s_val);
+		s_val.free(self.allocator);	
 	}
 }
 
@@ -54,8 +56,8 @@ fn Value Interpreter.eval(&self, Expr* expr)
 		// 	expr.index.eval();
 		case BINDING:
 			return self.eval_binding(&expr.binding);
-		// case BLOCK:
-		// 	expr.block.eval();
+		case BLOCK:
+			return self.eval_block(&expr.block);
 		// case FUNCTION:
 		// 	expr.block.eval();
 		default: io::printn("not implemented");
@@ -128,7 +130,10 @@ fn Value Interpreter.eval_binding(&self, Binding* expr)
 	Value value = self.eval(expr.value);
 	self.global_scope.set(expr.identifier.slice, value);
 
-	return {
-		.kind = UNIT
-	};
+	return value::UNIT;
+}
+
+fn Value Interpreter.eval_block(&self, Block* expr)
+{
+	return value::UNIT;	
 }
