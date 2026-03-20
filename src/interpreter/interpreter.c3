@@ -3,115 +3,132 @@ import std::io;
 
 import cyqra::parser::ast;
 
-enum ValueKind
-{
-	UNIT,
-	INT,
-	FLOAT,
-	STRING,	
-}
-
-struct Value
-{
-	ValueKind kind;
-	union {
-		long _int;
-		double _float;
-		String _string;
-	}
-}
-
-fn void Value.print(&self)
-{
-	switch(self.kind) {
-		case INT: io::printn(self._int);
-		case FLOAT: io::printn(self._float);
-		default:
-	}
-}
-
 struct Interpreter
 {
-	Ast ast;
+	Allocator allocator;
+
+	Scope* global_scope;
 }
 
 fn Interpreter new(
-	Ast ast
+	Allocator allocator
 )
 {
+	Scope* global_scope = scope::new_ref(allocator);
 	return {
-		.ast = ast,
+		.allocator = allocator,
+		.global_scope = global_scope
 	};
 }
 
-fn void Interpreter.interpret(&self)
+fn void Interpreter.free(&self)
 {
-	foreach (expr: self.ast.expressions) {
-		Value val = expr.eval();
+	self.global_scope.free();
+	allocator::free(self.allocator, self.global_scope);
+}
+
+fn void Interpreter.interpret(&self, Ast ast)
+{
+	foreach (expr: ast.expressions) {
+		Value val = self.eval(expr);
 		val.print();		
 	}
 }
 
-fn Value Expr.eval(&self)
+fn Value Interpreter.eval(&self, Expr* expr)
 {
-	switch (self.kind) {
+	switch (expr.kind) {
 		case PRIMARY:
-			return self.primary.eval();			
+			return self.eval_primary(&expr.primary);			
+		case STRING:
+			return self.eval_string(&expr.string);
 		// case PREFIX:
 		// 	expr.prefix.eval();
 		// case POSTFIX:
 		// 	expr.postfix.eval();
-		case INFIX:
-			return self.infix.eval();
-		// case CALL:
+		// case INFIX:
+		// 	return self.infix.eval(scope);
+	// case CALL:
 		// 	expr.call.eval();
 		// case INDEX:
 		// 	expr.index.eval();
-		// case BINDING:
-		// 	expr.binding.eval();
+		case BINDING:
+			return self.eval_binding(&expr.binding);
 		// case BLOCK:
 		// 	expr.block.eval();
 		// case FUNCTION:
 		// 	expr.block.eval();
 		default: io::printn("not implemented");
 	}
-	return {
-		.kind = UNIT
-	};
+	return value::UNIT;
 }
 
-fn Value Primary.eval(&self)
+fn Value Interpreter.eval_primary(&self, Primary* expr)
 {
-	switch (self.token.kind) {
+	switch (expr.token.kind) {
 		case INTEGER: return {
 			.kind = INT,
-			._int = self.token.slice.to_long()!!
+			._int = expr.token.slice.to_long()!!
 		};
 		case FLOAT: return {
 			.kind = FLOAT,
-			._float = self.token.slice.to_double()!!
+			._float = expr.token.slice.to_double()!!
 		};
 		case IDENTIFIER:
+			return self.global_scope.get(expr.token.slice)!!;
 		default: unreachable("Unreachable reached in primary eval"); 
 	}
 }
 
-fn Value Infix.eval(&self)
+fn Value Interpreter.eval_string(&self, StringLiteral* expr)
 {
-	Value lhs_v = self.lhs.eval();
-	Value rhs_v = self.rhs.eval();
+	DString dstring = (DString){}.init(self.allocator);
 
-	switch (self.op) {
-		case PLUS:
-			if (lhs_v.kind == INT && rhs_v.kind == INT) {
-                return {
-					.kind = INT,
-					._int = lhs_v._int + rhs_v._int,
-				};
-            }
-            unreachable("invalid operands for +");
-		case MINUS:
-		case STAR:
-		default: unreachable("Unreacahble reached in infix eval");	
-	}		
+	foreach (part: expr.parts) {
+		switch (part.kind) {
+			case TEXT:
+				dstring.append(part.text);
+			case INTERP:
+				Value val = self.eval(part.interp);
+				dstring.append(val.to_string(self.allocator));			
+		}
+	}
+
+	String result = dstring.copy_str(self.allocator);
+	dstring.free();
+	
+	return {
+		.kind = STRING,
+		._string = result
+	};
+}
+
+// fn Value Infix.eval(&self, Scope* scope)
+// {
+// 	Value lhs_v = self.lhs.eval(scope);
+// 	Value rhs_v = self.rhs.eval(scope);
+
+// 	switch (self.op) {
+// 		case PLUS:
+// 			if (lhs_v.kind == INT && rhs_v.kind == INT) {
+//                 return {
+// 					.kind = INT,
+// 					._int = lhs_v._int + rhs_v._int,
+// 				};
+//             }
+//             unreachable("invalid operands for +");
+// 		case MINUS:
+// 		case STAR:
+// 		default: unreachable("Unreacahble reached in infix eval");	
+// 	}		
+// }
+
+fn Value Interpreter.eval_binding(&self, Binding* expr)
+{
+	Value value = self.eval(expr.value);
+	self.global_scope.set(expr.identifier.slice, value);
+
+	return {
+		.kind = UNIT
+	};
 }

@@ -6,8 +6,13 @@ letter = upper-case | lower-case;
 number = digit , { digit };
 
 char = "'" , ? ascii-char ? , "'" ;
-string = '"' , { ? any-char ? } , '"';
+text = '"' , { ? any-char ? } , '"';
 bool = "true" | "false";
+
+interpolation = "${" , expression , "}";
+string_part = ( text | interpolation );
+string = '"' , { string_part } , '"';
+
 
 literal = number
 	 	  | char

@@ -21,9 +21,15 @@ fn Ast new(Allocator allocator)
 	};
 }
 
+fn void Ast.free(&self)
+{
+	self.expressions.free();
+}
+
 enum ExprKind
 {
 	PRIMARY,
+	STRING,
 	PREFIX,
 	POSTFIX,
 	INFIX,
@@ -81,11 +87,31 @@ struct Function
 	Expr* body;
 }
 
+enum StringPartKind
+{
+    TEXT,
+    INTERP,
+}
+struct StringPart
+{
+    StringPartKind kind;
+    union {
+        String text;
+        Expr* interp;
+    }
+}
+
+struct StringLiteral
+{
+	List{ StringPart } parts;
+}
+
 struct Expr
 {
 	ExprKind kind;
 	union {
 		Primary primary;
+		StringLiteral string; 
 		Prefix prefix;
 		Postfix postfix;
 		Infix infix;
@@ -155,6 +181,16 @@ fn void Expr.print(&self)
 			}
 			self.fun.body.print();
 			break;
+		case STRING:
+			foreach(part : self.string.parts)
+			{
+				if(part.kind == TEXT) {
+					io::print(part.text);
+				}
+				else {
+					part.interp.print();
+				}
+			}
 	}
 	io::print(") ");
 }

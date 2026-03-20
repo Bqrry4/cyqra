@@ -119,7 +119,7 @@ fn void Parser.parse(&self)
 	
 }
 
-
+//! Needs refactoring
 fn Precedence? Parser.check_prefix_op(&self, TokenKind tk)
 {
 	_Operator_ maybe_op = self.prefix_ops[tk];
@@ -204,6 +204,45 @@ fn Expr*? Parser.expr_head(&self)
 					.token = tk
 				}
 			});
+		case D_QUOTES: {
+			List{ StringPart } parts;
+			parts.init(mem);
+
+			while (!self.follows(D_QUOTES)!) {
+				StringPart part;
+				tk = self.advance()!;
+
+				switch (tk.kind) {
+					case STRING_PART:
+						part = {
+							.kind = TEXT,
+							.text = tk.slice 	
+						};
+					case INTERP_START:
+						part = {
+							.kind = INTERP,
+							.interp = self.parse_expression()! 
+						};
+						if (!self.follows(INTERP_END)!) {
+							io::printn("Was expecting Close bracket");
+							return ast::INVALID_EXPRESSION~;			
+						}
+					case INTERP_IDENT:
+						part = {
+							.kind = INTERP,
+							.interp = self.parse_expression()!
+						};
+					default: unreachable("Unexpected token in string body");
+				}
+				parts.push(part);
+			}	
+			return mem::new(Expr, {
+				.kind = ExprKind.STRING,
+				.string = {
+					.parts = parts
+				}  
+			});
+		}
 		//& identifier
 		//& shell_call 
 		case IDENTIFIER:
@@ -216,8 +255,7 @@ fn Expr*? Parser.expr_head(&self)
 				});
 			}
 	
-			return self.parse_shell_call(tk);		
-				
+			return self.parse_shell_call(tk);							
 		//& sub_expression 
 		case OPEN_PHARANTESIS:
 			Expr* expr = self.parse_expression()!;
@@ -338,7 +376,7 @@ fn Expr*? Parser.parse_binding(&self)
 {
 	TokenKind binding_type = self.peek()!.kind;
 	switch(binding_type) {
-		case LET..ALIAS:
+		case LET..ENV:
 			self.advance()!;
 		default:
 			// io::printn("No binding keyword");

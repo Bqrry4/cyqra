@@ -15,7 +15,7 @@ enum TokenKind : int @public
      EQ, NEQ,
      L_AND, L_OR,
      PIPE, PIPE_ALL,
-     DOT, DOT_DOT,
+     DOT, DOTX2, DOTX3,
 
      ASGN,
      PLUS_ASGN, MINUS_ASGN,
@@ -37,7 +37,7 @@ enum TokenKind : int @public
      NEW_LINE, SPACE,
 
      /* keywords */
-     LET, MUT, ENV, ALIAS,
+     LET, MUT, ENV,
      IF, ELSE, WHILE,
      FN,
 

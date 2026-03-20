@@ -9,7 +9,6 @@ const Keyword[] KEYWORDS = {
     { "let",   LET   },
     { "mut",   MUT   },
     { "env",   ENV   },
-    { "alias", ALIAS },
     { "fn",    FN    },
     { "if",    IF    },
     { "else",  ELSE  },

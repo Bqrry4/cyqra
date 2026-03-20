@@ -22,7 +22,10 @@ fn void exec(String[] args)
     (void)child.join();
 }
 
-fn void int_loop() => @pool() {
+fn void int_loop() => @pool()
+{
+    Interpreter interpreter = interpreter::new(tmem);
+
     while (true) {
         io::print("> ");
         // read
@@ -32,14 +35,13 @@ fn void int_loop() => @pool() {
         List{Token} tokens = lexer.analyze();
         // foreach(t:tokens)
         // {
-        //     io::print(t);   
+            // io::print(t);   
         // }
         
         Parser parser = parser::new(tmem, tokens);
         parser.parse();
 
-        Interpreter interpreter = interpreter::new(parser.ast);
-        interpreter.interpret();
+        interpreter.interpret(parser.ast);
    }
 }
 
