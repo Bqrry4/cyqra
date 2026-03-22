@@ -11,3 +11,7 @@ fn bool Nullable.is_null(self)
 }
 
 const Nullable NULL = { null };
+
+fn Nullable value(Type ptr) =>{
+	.ptr = ptr
+};

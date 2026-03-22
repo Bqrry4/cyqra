@@ -1,43 +1,48 @@
 module cyqra::interpreter;
 import std::io;
+import std::math;
 
 import cyqra::parser::ast;
+import utils;
 
 struct Interpreter
 {
 	Allocator allocator;
 
-	Scope* global_scope;
+	Scope* scope;
 }
 
 fn Interpreter new(
 	Allocator allocator
 )
 {
-	Scope* global_scope = scope::new_ref(allocator);
+	Scope* scope = scope::new_ref(allocator);
 	return {
 		.allocator = allocator,
-		.global_scope = global_scope
+		.scope = scope
 	};
 }
 
 fn void Interpreter.free(&self)
 {
-	self.global_scope.free();
-	allocator::free(self.allocator, self.global_scope);
+	self.scope.free();
+	allocator::free(self.allocator, self.scope);
 }
 
 fn void Interpreter.interpret(&self, Ast ast)
 {
+	Value last = value::UNIT;
 	foreach (expr: ast.expressions) {
-		Value val = self.eval(expr);
-		String s_val = val.to_string(self.allocator);
-		io::printn(s_val);
-		s_val.free(self.allocator);	
+		if (catch @try(last, self.eval(expr))) {
+			io::printn("Error eval");	
+		}
 	}
+	String s_val = last.to_string(self.allocator);
+	io::printn(s_val);
+	s_val.free(self.allocator);	
 }
 
-fn Value Interpreter.eval(&self, Expr* expr)
+fn Value? Interpreter.eval(&self, Expr* expr)
 {
 	switch (expr.kind) {
 		case PRIMARY:
@@ -48,12 +53,13 @@ fn Value Interpreter.eval(&self, Expr* expr)
 		// 	expr.prefix.eval();
 		// case POSTFIX:
 		// 	expr.postfix.eval();
-		// case INFIX:
-		// 	return self.infix.eval(scope);
+		case INFIX:
+			return self.eval_infix(&expr.infix)!;
 	// case CALL:
 		// 	expr.call.eval();
 		// case INDEX:
 		// 	expr.index.eval();
+		// 
 		case BINDING:
 			return self.eval_binding(&expr.binding);
 		case BLOCK:
@@ -65,24 +71,24 @@ fn Value Interpreter.eval(&self, Expr* expr)
 	return value::UNIT;
 }
 
-fn Value Interpreter.eval_primary(&self, Primary* expr)
+fn Value? Interpreter.eval_primary(&self, Primary* expr)
 {
 	switch (expr.token.kind) {
 		case INTEGER: return {
 			.kind = INT,
-			._int = expr.token.slice.to_long()!!
+			._int = expr.token.slice.to_long()!
 		};
 		case FLOAT: return {
 			.kind = FLOAT,
-			._float = expr.token.slice.to_double()!!
+			._float = expr.token.slice.to_double()!
 		};
 		case IDENTIFIER:
-			return self.global_scope.get(expr.token.slice)!!;
+			return self.scope.get(expr.token.slice)!;
 		default: unreachable("Unreachable reached in primary eval"); 
 	}
 }
 
-fn Value Interpreter.eval_string(&self, StringLiteral* expr)
+fn Value? Interpreter.eval_string(&self, StringLiteral* expr)
 {
 	DString dstring = (DString){}.init(self.allocator);
 
@@ -91,7 +97,7 @@ fn Value Interpreter.eval_string(&self, StringLiteral* expr)
 			case TEXT:
 				dstring.append(part.text);
 			case INTERP:
-				Value val = self.eval(part.interp);
+				Value val = self.eval(part.interp)!;
 				dstring.append(val.to_string(self.allocator));			
 		}
 	}
@@ -105,35 +111,109 @@ fn Value Interpreter.eval_string(&self, StringLiteral* expr)
 	};
 }
 
-// fn Value Infix.eval(&self, Scope* scope)
-// {
-// 	Value lhs_v = self.lhs.eval(scope);
-// 	Value rhs_v = self.rhs.eval(scope);
 
-// 	switch (self.op) {
-// 		case PLUS:
-// 			if (lhs_v.kind == INT && rhs_v.kind == INT) {
-//                 return {
-// 					.kind = INT,
-// 					._int = lhs_v._int + rhs_v._int,
-// 				};
-//             }
-//             unreachable("invalid operands for +");
-// 		case MINUS:
-// 		case STAR:
-// 		default: unreachable("Unreacahble reached in infix eval");	
-// 	}		
-// }
+faultdef UNSUPORTED_OP;
 
-fn Value Interpreter.eval_binding(&self, Binding* expr)
+fn Value? Interpreter.eval_infix(&self, Infix* expr)
 {
-	Value value = self.eval(expr.value);
-	self.global_scope.set(expr.identifier.slice, value);
+	Value lhs_v = self.eval(expr.lhs)!;
+	Value rhs_v = self.eval(expr.rhs)!;
+
+	if (lhs_v.kind != rhs_v.kind) {
+		value::coerce(lhs_v, rhs_v)!.unpack(&lhs_v, &rhs_v);
+	}
+
+	switch (expr.op) {
+		case PLUS: switch (lhs_v.kind) {
+			case INT:
+				return value::_int(lhs_v._int + rhs_v._int);
+			case FLOAT:
+				return value::_float(lhs_v._float + rhs_v._float);
+			default: return UNSUPORTED_OP~;
+		}
+		case MINUS: switch(lhs_v.kind) {
+			case INT:
+				return value::_int(lhs_v._int - rhs_v._int);
+			case FLOAT:
+				return value::_float(lhs_v._float - rhs_v._float);
+			default: return UNSUPORTED_OP~;
+		}
+		case STAR: switch(lhs_v.kind) {
+			case INT:
+				return value::_int(lhs_v._int * rhs_v._int);
+			case FLOAT:
+				return value::_float(lhs_v._float * rhs_v._float);
+			default: return UNSUPORTED_OP~;
+		}
+		case STAR_STAR: switch(lhs_v.kind) {
+			case INT:
+				return value::_float(math::pow((int)lhs_v._int, (int)rhs_v._int));
+			case FLOAT:
+				return value::_float(math::pow(lhs_v._float, rhs_v._float));
+			default: return UNSUPORTED_OP~;
+		}
+		case SLASH: switch(lhs_v.kind) {
+			case INT:
+				return value::_float(lhs_v.as_float()._float / rhs_v._int);
+			case FLOAT:
+				return value::_float(lhs_v._float / rhs_v._float);
+			default: return UNSUPORTED_OP~;
+		}
+		case SLASH_SLASH: switch(lhs_v.kind) {
+			case INT:
+				return value::_int(lhs_v._int / rhs_v._int);
+			case FLOAT:
+				return value::_float(lhs_v._float - rhs_v._float);
+			default: return UNSUPORTED_OP~;
+		}
+		case PERCENT: switch(lhs_v.kind) {
+			case INT:
+				return value::_int(lhs_v._int % rhs_v._int);
+			case FLOAT:
+				return value::_float(lhs_v._float - math::floor(lhs_v._float / rhs_v._float) * rhs_v._float);
+			default: return UNSUPORTED_OP~;
+		}
+		default: unreachable("Unreacahble reached in infix eval");	
+	}
+	unreachable("Shouldnt trigger infix");
+}
+
+fn Value? Interpreter.eval_binding(&self, Binding* expr)
+{
+	Value value = self.eval(expr.value)!;
+
+	switch (expr.type) {
+		case LET:
+		case MUT:
+			self.scope.set(expr.identifier.slice, value);
+		case ENV:	// os::set_var();
+		default: unreachable("Not a binding keyword");			
+	}
+	
 
 	return value::UNIT;
 }
 
-fn Value Interpreter.eval_block(&self, Block* expr)
+fn Value? Interpreter.eval_block(&self, Block* expr, Nullable{ Scope* } scope = nullable::NULL)
 {
-	return value::UNIT;	
+	Scope* local_scope = scope.ptr;
+	if(scope.is_null()) {
+		local_scope = scope::new_ref(self.allocator, nullable::value(self.scope));
+		defer local_scope.free();
+	}
+	
+	self.scope = local_scope;
+
+	Value last = value::UNIT;
+	foreach (stmt: expr.stmts) {
+		last = self.eval(stmt)!;
+	}
+
+	self.scope = local_scope.parent.ptr;
+	return last;	
 }
+
+fn Value? Interpreter.eval_fn(&self, Function* expr)
+{
+	return value::UNIT;
+} 

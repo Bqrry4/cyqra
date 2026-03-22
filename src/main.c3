@@ -50,7 +50,11 @@ fn void from_file(String content)
     Lexer lexer = lexer::new(tmem, content);
     List{Token} tokens = lexer.analyze();
 
-    Parser parser = parser::new(tmem, tokens);
+        // foreach(t:tokens)
+        // {
+            // io::print(t);   
+        // }
+     Parser parser = parser::new(tmem, tokens);
     parser.parse();
 
     Interpreter interpreter = interpreter::new(tmem);

@@ -105,6 +105,11 @@ fn void Parser.parse(&self)
 	{
 		while(!self.eot())
 		{
+			if (try expr = self.parse_block()) {
+				self.ast.expressions.push(expr);
+				continue;	
+			}
+			
 			if (try expr = self.parse_function()) {
 				self.ast.expressions.push(expr);
 				continue;		
@@ -429,7 +434,7 @@ fn Expr*? Parser.parse_block(&self)
 {
 	
 	if(!self.follows(TokenKind.OPEN_BRACE)!) {
-		io::printn("No {");
+		// io::printn("No {");
 		return ast::INVALID_EXPRESSION~;
 	}
 
@@ -444,7 +449,7 @@ fn Expr*? Parser.parse_block(&self)
 
 		
 		if(!self.follows(TokenKind.CLOSED_BRACE)!) {
-			io::printn("No }");
+			// io::printn("No }");
 			return ast::INVALID_EXPRESSION~;
 		}
 	}
