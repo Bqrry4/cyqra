@@ -83,7 +83,7 @@ struct Block
 struct Function
 {
 	Token identifier;
-	List{ Token } params;
+	List{ String } params;
 	Expr* body;
 }
 

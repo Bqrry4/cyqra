@@ -1,6 +1,9 @@
 module cyqra::interpreter::value;
 import std::io;
 import std::collections::pair;
+import std::collections::list;
+
+import cyqra::parser::ast;
 
 enum ValueKind
 {
@@ -11,6 +14,11 @@ enum ValueKind
 	FUNCTION	
 }
 
+struct Fn {
+	List{ String } params;
+	Block* body;
+}
+
 struct Value
 {
 	ValueKind kind;
@@ -18,6 +26,7 @@ struct Value
 		long _int;
 		double _float;
 		String _string;
+		Fn _fn;
 	}
 }
 
@@ -55,6 +64,8 @@ fn Value? Value.as_float(&self)
 		default: return INCOMPATIBLE_TYPE~;
 	}
 }
+
+fn bool Value.is_fn(&self) => self.kind == FUNCTION;
 
 <* 
 * float > int > string

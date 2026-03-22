@@ -5,6 +5,10 @@ import std::math;
 import cyqra::parser::ast;
 import utils;
 
+faultdef UNSUPORTED_OP;
+faultdef NOT_A_FUNCTION;
+faultdef INVALID_ARGS_COUNT;
+
 struct Interpreter
 {
 	Allocator allocator;
@@ -33,9 +37,10 @@ fn void Interpreter.interpret(&self, Ast ast)
 {
 	Value last = value::UNIT;
 	foreach (expr: ast.expressions) {
-		if (catch @try(last, self.eval(expr))) {
-			io::printn("Error eval");	
-		}
+		// if (catch @try(last, self.eval(expr))) {
+			// io::printn("Error eval");	
+		// }
+		last = self.eval(expr)!!;
 	}
 	String s_val = last.to_string(self.allocator);
 	io::printn(s_val);
@@ -54,9 +59,9 @@ fn Value? Interpreter.eval(&self, Expr* expr)
 		// case POSTFIX:
 		// 	expr.postfix.eval();
 		case INFIX:
-			return self.eval_infix(&expr.infix)!;
-	// case CALL:
-		// 	expr.call.eval();
+			return self.eval_infix(&expr.infix);
+		case CALL:
+	 		return self.eval_call(&expr.call);
 		// case INDEX:
 		// 	expr.index.eval();
 		// 
@@ -64,8 +69,8 @@ fn Value? Interpreter.eval(&self, Expr* expr)
 			return self.eval_binding(&expr.binding);
 		case BLOCK:
 			return self.eval_block(&expr.block);
-		// case FUNCTION:
-		// 	expr.block.eval();
+		case FUNCTION:
+			return self.eval_fn(&expr.fun);
 		default: io::printn("not implemented");
 	}
 	return value::UNIT;
@@ -111,66 +116,63 @@ fn Value? Interpreter.eval_string(&self, StringLiteral* expr)
 	};
 }
 
-
-faultdef UNSUPORTED_OP;
-
 fn Value? Interpreter.eval_infix(&self, Infix* expr)
 {
-	Value lhs_v = self.eval(expr.lhs)!;
-	Value rhs_v = self.eval(expr.rhs)!;
+	Value lhs = self.eval(expr.lhs)!;
+	Value rhs = self.eval(expr.rhs)!;
 
-	if (lhs_v.kind != rhs_v.kind) {
-		value::coerce(lhs_v, rhs_v)!.unpack(&lhs_v, &rhs_v);
+	if (lhs.kind != rhs.kind) {
+		value::coerce(lhs, rhs)!.unpack(&lhs, &rhs);
 	}
 
 	switch (expr.op) {
-		case PLUS: switch (lhs_v.kind) {
+		case PLUS: switch (lhs.kind) {
 			case INT:
-				return value::_int(lhs_v._int + rhs_v._int);
+				return value::_int(lhs._int + rhs._int);
 			case FLOAT:
-				return value::_float(lhs_v._float + rhs_v._float);
+				return value::_float(lhs._float + rhs._float);
 			default: return UNSUPORTED_OP~;
 		}
-		case MINUS: switch(lhs_v.kind) {
+		case MINUS: switch(lhs.kind) {
 			case INT:
-				return value::_int(lhs_v._int - rhs_v._int);
+				return value::_int(lhs._int - rhs._int);
 			case FLOAT:
-				return value::_float(lhs_v._float - rhs_v._float);
+				return value::_float(lhs._float - rhs._float);
 			default: return UNSUPORTED_OP~;
 		}
-		case STAR: switch(lhs_v.kind) {
+		case STAR: switch(lhs.kind) {
 			case INT:
-				return value::_int(lhs_v._int * rhs_v._int);
+				return value::_int(lhs._int * rhs._int);
 			case FLOAT:
-				return value::_float(lhs_v._float * rhs_v._float);
+				return value::_float(lhs._float * rhs._float);
 			default: return UNSUPORTED_OP~;
 		}
-		case STAR_STAR: switch(lhs_v.kind) {
+		case STAR_STAR: switch(lhs.kind) {
 			case INT:
-				return value::_float(math::pow((int)lhs_v._int, (int)rhs_v._int));
+				return value::_float(math::pow((int)lhs._int, (int)rhs._int));
 			case FLOAT:
-				return value::_float(math::pow(lhs_v._float, rhs_v._float));
+				return value::_float(math::pow(lhs._float, rhs._float));
 			default: return UNSUPORTED_OP~;
 		}
-		case SLASH: switch(lhs_v.kind) {
+		case SLASH: switch(lhs.kind) {
 			case INT:
-				return value::_float(lhs_v.as_float()._float / rhs_v._int);
+				return value::_float(lhs.as_float()._float / rhs._int);
 			case FLOAT:
-				return value::_float(lhs_v._float / rhs_v._float);
+				return value::_float(lhs._float / rhs._float);
 			default: return UNSUPORTED_OP~;
 		}
-		case SLASH_SLASH: switch(lhs_v.kind) {
+		case SLASH_SLASH: switch(lhs.kind) {
 			case INT:
-				return value::_int(lhs_v._int / rhs_v._int);
+				return value::_int(lhs._int / rhs._int);
 			case FLOAT:
-				return value::_float(lhs_v._float - rhs_v._float);
+				return value::_float(lhs._float - rhs._float);
 			default: return UNSUPORTED_OP~;
 		}
-		case PERCENT: switch(lhs_v.kind) {
+		case PERCENT: switch(lhs.kind) {
 			case INT:
-				return value::_int(lhs_v._int % rhs_v._int);
+				return value::_int(lhs._int % rhs._int);
 			case FLOAT:
-				return value::_float(lhs_v._float - math::floor(lhs_v._float / rhs_v._float) * rhs_v._float);
+				return value::_float(lhs._float - math::floor(lhs._float / rhs._float) * rhs._float);
 			default: return UNSUPORTED_OP~;
 		}
 		default: unreachable("Unreacahble reached in infix eval");	
@@ -186,11 +188,10 @@ fn Value? Interpreter.eval_binding(&self, Binding* expr)
 		case LET:
 		case MUT:
 			self.scope.set(expr.identifier.slice, value);
+		//! TODO env
 		case ENV:	// os::set_var();
 		default: unreachable("Not a binding keyword");			
 	}
-	
-
 	return value::UNIT;
 }
 
@@ -214,6 +215,40 @@ fn Value? Interpreter.eval_block(&self, Block* expr, Nullable{ Scope* } scope = 
 }
 
 fn Value? Interpreter.eval_fn(&self, Function* expr)
-{
+{	
+	self.scope.set(expr.identifier.slice, {
+		.kind = FUNCTION,
+		._fn = {
+			.params = expr.params,
+			.body = &expr.body.block
+		}
+	});
 	return value::UNIT;
 } 
+
+//! TODO split and use contracts
+fn Value? Interpreter.eval_call(&self, Call* expr)
+{
+	if (try callee = self.eval(expr.callee)) {
+		if (!callee.is_fn()) {
+			return NOT_A_FUNCTION~;
+		}
+	
+		Scope* fn_scope = scope::new_ref(self.allocator, nullable::value(self.scope));
+		defer fn_scope.free();
+
+		if (callee._fn.params.len() != expr.args.len()) {
+			return INVALID_ARGS_COUNT~;
+		}
+
+		foreach (i, arg_expr: expr.args) {
+			Value arg = self.eval(arg_expr)!;
+			fn_scope.set(callee._fn.params[i], arg);
+		}
+		return self.eval_block(callee._fn.body, nullable::value(fn_scope));
+	}
+	//! TODO
+	// prob a shell call
+	
+	return value::UNIT;
+}

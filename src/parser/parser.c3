@@ -462,7 +462,7 @@ fn Expr*? Parser.parse_block(&self)
 	});
 }
 
-fn void? Parser.parse_parameters(&self, List{ Token }* params)
+fn void? Parser.parse_parameters(&self, List{ String }* params)
 {
 	do {
 		Token tk = self.peek()!;
@@ -470,7 +470,7 @@ fn void? Parser.parse_parameters(&self, List{ Token }* params)
 			return ast::INVALID_EXPRESSION~;
 		}
 		self.advance()!;
-		params.push(tk);
+		params.push(tk.slice);
 	} while (self.follows(TokenKind.COMMA)!);
 }
 
@@ -492,7 +492,7 @@ fn Expr*? Parser.parse_function(&self)
 		return ast::INVALID_EXPRESSION~;
 	}
 
-	List{ Token } params;
+	List{ String } params;
 	params.init(mem);
 	
 	if(!self.follows(TokenKind.CLOSED_PHARANTESIS)!) {
