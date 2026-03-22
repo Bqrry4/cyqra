@@ -196,7 +196,9 @@ fn void? Lexer.lex_text(&self, char c)
                if (self.ctx().mode == RAW) {
                     self.ctxs.switch_back();
                     self.lex_code(c)!;
+                    break;
                }
+               nextcase default;
           }
           case '\\':
           default: self.lex_string_text()!;    

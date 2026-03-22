@@ -34,7 +34,7 @@ fn void interactive() => @pool()
         List{Token} tokens = lexer.analyze();
         // foreach(t:tokens)
         // {
-            // io::print(t);   
+        //     io::print(t);   
         // }
         
         Parser parser = parser::new(tmem, tokens);
@@ -50,11 +50,11 @@ fn void from_file(String content)
     Lexer lexer = lexer::new(tmem, content);
     List{Token} tokens = lexer.analyze();
 
-        // foreach(t:tokens)
-        // {
-            // io::print(t);   
-        // }
-     Parser parser = parser::new(tmem, tokens);
+     // foreach(t:tokens)
+     // {
+     //  io::print(t);   
+     // }
+    Parser parser = parser::new(tmem, tokens);
     parser.parse();
 
     Interpreter interpreter = interpreter::new(tmem);
