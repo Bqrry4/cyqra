@@ -6,13 +6,14 @@ struct Keyword {
 }
 
 const Keyword[] KEYWORDS = {
-    { "let",   LET   },
-    { "mut",   MUT   },
-    { "env",   ENV   },
-    { "fn",    FN    },
-    { "if",    IF    },
-    { "else",  ELSE  },
-    { "while", WHILE },
+     { "let",    LET },
+     { "mut",    MUT },
+     { "env",    ENV },
+     { "fn",     FN },
+     { "return", RETURN }, 
+     { "if",     IF },
+     { "else",   ELSE },
+     { "while",  WHILE },
 };
 
 fn TokenKind check_keywords(String word)

@@ -9,11 +9,16 @@ faultdef UNSUPORTED_OP;
 faultdef NOT_A_FUNCTION;
 faultdef INVALID_ARGS_COUNT;
 
+//! Temporary solution for the return from functions using faults
+faultdef RETURN_STATEMENT;
+
 struct Interpreter
 {
 	Allocator allocator;
-
 	Scope* scope;
+
+	//! temporary solution
+	Value return_value;
 }
 
 fn Interpreter new(
@@ -38,7 +43,7 @@ fn void Interpreter.interpret(&self, Ast ast)
 	Value last = value::UNIT;
 	foreach (expr: ast.expressions) {
 		// if (catch @try(last, self.eval(expr))) {
-			// io::printn("Error eval");	
+		// 	io::printn("Error eval");	
 		// }
 		last = self.eval(expr)!!;
 	}
@@ -71,6 +76,8 @@ fn Value? Interpreter.eval(&self, Expr* expr)
 			return self.eval_block(&expr.block);
 		case FUNCTION:
 			return self.eval_fn(&expr.fun);
+		case RETURN:
+			return self.eval_return(&expr.ret);
 		default: io::printn("not implemented");
 	}
 	return value::UNIT;
@@ -245,10 +252,26 @@ fn Value? Interpreter.eval_call(&self, Call* expr)
 			Value arg = self.eval(arg_expr)!;
 			fn_scope.set(callee._fn.params[i], arg);
 		}
-		return self.eval_block(callee._fn.body, nullable::value(fn_scope));
+
+		Value returned = value::UNIT;
+		if (catch err = @try(returned, self.eval_block(callee._fn.body, nullable::value(fn_scope)))) {
+			if (err == RETURN_STATEMENT) {
+				return self.return_value;
+			}
+		}
+		return returned;
 	}
 	//! TODO
 	// prob a shell call
 	
 	return value::UNIT;
+}
+
+fn Value? Interpreter.eval_return(&self, Return* expr)
+{
+	self.return_value = value::UNIT;
+	if(!expr.value.is_null()) {
+		self.return_value = self.eval(expr.value.ptr)!;
+	}
+	return RETURN_STATEMENT~;
 }

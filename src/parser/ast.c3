@@ -3,6 +3,8 @@ import cyqra::lexer;
 import std::io;
 import std::collections::list;
 
+import utils::nullable;
+
 faultdef INVALID_EXPRESSION;
 
 struct Ast
@@ -37,7 +39,8 @@ enum ExprKind
 	INDEX,
 	BINDING,
 	BLOCK,
-	FUNCTION
+	FUNCTION,
+	RETURN
 }
 
 struct Primary
@@ -86,6 +89,10 @@ struct Function
 	List{ String } params;
 	Expr* body;
 }
+struct Return
+{
+	Nullable { Expr* } value;
+}
 
 enum StringPartKind
 {
@@ -120,6 +127,7 @@ struct Expr
 		Binding binding;
 		Block block;
 		Function fun;
+		Return ret;
 	}
 }
 
@@ -191,6 +199,7 @@ fn void Expr.print(&self)
 					part.interp.print();
 				}
 			}
+		default:
 	}
 	io::print(") ");
 }

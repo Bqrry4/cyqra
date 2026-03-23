@@ -52,13 +52,18 @@ fn void from_file(String content)
 
      // foreach(t:tokens)
      // {
-     //  io::print(t);   
+      // io::print(t);   
      // }
     Parser parser = parser::new(tmem, tokens);
     parser.parse();
 
-    Interpreter interpreter = interpreter::new(tmem);
-    interpreter.interpret(parser.ast);
+    foreach(expr: parser.ast.expressions)
+    {
+        expr.print();
+    }
+    
+    // Interpreter interpreter = interpreter::new(tmem);
+    // interpreter.interpret(parser.ast);
 }
 
 fn int main(String[] args)

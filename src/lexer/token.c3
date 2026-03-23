@@ -39,7 +39,7 @@ enum TokenKind : int @public
      /* keywords */
      LET, MUT, ENV,
      IF, ELSE, WHILE,
-     FN,
+     FN, RETURN,
 
      /* string */
      D_QUOTES, DOLLAR_SIGN,

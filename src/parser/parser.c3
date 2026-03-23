@@ -5,6 +5,7 @@ import std::collections::maybe;
 import std::io;
 
 import cyqra::lexer;
+import utils::nullable;
 
 alias _Operator_ = Maybe{ Operator };
 
@@ -411,19 +412,44 @@ fn Expr*? Parser.parse_binding(&self)
 	});
 }
 
+//! TODO
 fn Expr*? Parser.parse_assignment(&self)
 {
 	return ast::INVALID_EXPRESSION~;
 }
 
+fn Expr*? Parser.parse_return(&self)
+{
+	if (self.peek()!.kind != RETURN) {
+		return ast::INVALID_EXPRESSION~;
+	}
+	self.advance()!;
+
+	Nullable{ Expr* } value = nullable::NULL;
+	if (try expr = self.parse_expression()) {
+		value = nullable::value(expr);
+	}
+
+	return mem::new(Expr, {
+		.kind = ExprKind.RETURN,
+		.ret = {
+			.value = value
+		}		
+	});
+}
+
 fn Expr*? Parser.parse_statement(&self)
 {
-	if(try binding = self.parse_binding()) {
+	if (try binding = self.parse_binding()) {
 		return binding;
 	}	
 
-	if(try assignment = self.parse_assignment()) {
+	if (try assignment = self.parse_assignment()) {
 		return assignment;
+	}
+
+	if (try return_stmt = self.parse_return()) {
+		return return_stmt;
 	}
 
 	return self.parse_expression();
@@ -433,7 +459,7 @@ fn Expr*? Parser.parse_statement(&self)
 fn Expr*? Parser.parse_block(&self)
 {
 	
-	if(!self.follows(TokenKind.OPEN_BRACE)!) {
+	if (!self.follows(TokenKind.OPEN_BRACE)!) {
 		// io::printn("No {");
 		return ast::INVALID_EXPRESSION~;
 	}
@@ -442,13 +468,17 @@ fn Expr*? Parser.parse_block(&self)
 	stmts.init(mem);
     
 
-	if(!self.follows(TokenKind.CLOSED_BRACE)!) {
+	if (!self.follows(TokenKind.CLOSED_BRACE)!) {
 	 	do {
           	stmts.push(self.parse_statement()!);
-        } while (self.follows(TokenKind.SEMICOLON)!);
+        } while (
+			self.follows(TokenKind.NEW_LINE, false)!
+			|| self.follows(TokenKind.SEMICOLON)!
+		);
 
 		
 		if(!self.follows(TokenKind.CLOSED_BRACE)!) {
+			io::printn(self.peek()!);
 			// io::printn("No }");
 			return ast::INVALID_EXPRESSION~;
 		}
@@ -466,7 +496,7 @@ fn void? Parser.parse_parameters(&self, List{ String }* params)
 {
 	do {
 		Token tk = self.peek()!;
-		if(tk.kind != TokenKind.IDENTIFIER) {
+		if (tk.kind != TokenKind.IDENTIFIER) {
 			return ast::INVALID_EXPRESSION~;
 		}
 		self.advance()!;
@@ -476,18 +506,18 @@ fn void? Parser.parse_parameters(&self, List{ String }* params)
 
 fn Expr*? Parser.parse_function(&self)
 {
-	if(!self.follows(TokenKind.FN)!) {
+	if (!self.follows(TokenKind.FN)!) {
 		// io::printn("Not a function");
 		return ast::INVALID_EXPRESSION~;
 	}
 	
 	Token identifier = self.advance()!;
-	if(identifier.kind != TokenKind.IDENTIFIER) {
+	if (identifier.kind != TokenKind.IDENTIFIER) {
 		io::printn("Function name missing");
 		return ast::INVALID_EXPRESSION~;
 	}
 
-	if(!self.follows(TokenKind.OPEN_PHARANTESIS)!) {
+	if (!self.follows(TokenKind.OPEN_PHARANTESIS)!) {
 		io::printn("No (");
 		return ast::INVALID_EXPRESSION~;
 	}
@@ -495,10 +525,10 @@ fn Expr*? Parser.parse_function(&self)
 	List{ String } params;
 	params.init(mem);
 	
-	if(!self.follows(TokenKind.CLOSED_PHARANTESIS)!) {
+	if (!self.follows(TokenKind.CLOSED_PHARANTESIS)!) {
 		self.parse_parameters(&params)!;
 
-		if(!self.follows(TokenKind.CLOSED_PHARANTESIS)!) {
+		if (!self.follows(TokenKind.CLOSED_PHARANTESIS)!) {
 			io::printn("No )");
 			return ast::INVALID_EXPRESSION~;
 		}
