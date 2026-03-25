@@ -62,8 +62,8 @@ fn void from_file(String content)
         expr.print();
     }
     
-    // Interpreter interpreter = interpreter::new(tmem);
-    // interpreter.interpret(parser.ast);
+    Interpreter interpreter = interpreter::new(tmem);
+    interpreter.interpret(parser.ast);
 }
 
 fn int main(String[] args)

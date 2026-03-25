@@ -74,55 +74,77 @@ fn void Parser.free(&self)
 	//!TODO
 }
 
-fn Token? Parser.advance(&self, bool skip_spaces = true)
+fn Token? Parser.advance(&self, bool skip_lf = true)
 {
-	if (skip_spaces) self.skip_spaces();		
+	self.skip_spaces(skip_lf);		
 	if (self.eot()) return OUT_OF_TOKENS~;
 	return (self.tokens[self.current++]);
 } 
-fn Token? Parser.peek(&self, bool skip_spaces = true)
+fn Token? Parser.peek(&self, bool skip_lf = true)
 {
-	if (skip_spaces) self.skip_spaces();
+	self.skip_spaces(skip_lf);
 	if(self.eot()) return OUT_OF_TOKENS~;
 	return (self.tokens[self.current]);
 }
 fn bool Parser.eot(&self) => self.current >= self.tokens.len(); 
-fn bool? Parser.follows(&self, TokenKind expect, bool skip_spaces = true)
+fn bool? Parser.follows(&self, TokenKind expect, bool consume = true, bool skip_lf = true)
 {
-	if(skip_spaces) self.skip_spaces();
-	return (self.peek()!.kind == expect) && ++self.current;
+	bool matches = (self.peek(skip_lf)!.kind == expect);
+	matches && consume && ++self.current;
+	return matches;
 } 
-fn void Parser.skip_spaces(&self)
+fn void Parser.skip_spaces(&self, bool skip_lf = false)
 {
-	while (!self.eot() &&
-		 (self.tokens[self.current].kind == TokenKind.SPACE ||
-		  self.tokens[self.current].kind == TokenKind.NEW_LINE)) {
-			self.current++;
-		};
+	while (
+		!self.eot() &&
+		(
+			(self.tokens[self.current].kind == TokenKind.SPACE) ||
+			(skip_lf && (self.tokens[self.current].kind == TokenKind.NEW_LINE))
+		)
+	) {
+		self.current++;
+	};
 }
 fn void Parser.parse(&self)
 {
 	mem::@scoped(self.allocator)
 	{
-		while(!self.eot())
-		{
-			if (try expr = self.parse_block()) {
+		while(!self.eot()) {
+
+			//! TODO: Rewrite this as dispatch instead
+			// if (try expr = self.parse_function()) {
+			// 	self.ast.expressions.push(expr);
+			// 	continue;		
+			// }
+
+			// if (try expr = self.parse_block()) {
+			// 	self.ast.expressions.push(expr);
+			// 	continue;	
+			// }
+
+			// if (try expr = self.parse_statement()) {
+			// 	self.ast.expressions.push(expr);
+			// 	continue;
+			// }
+			Expr* expr;
+			if(catch err = @try(expr, self.parse_function())) {
+				io::printn(err);
+			} else {
 				self.ast.expressions.push(expr);
-				continue;	
 			}
 			
-			if (try expr = self.parse_function()) {
+			if(catch err = @try(expr, self.parse_block())) {
+				io::printn(err);
+			} else {
 				self.ast.expressions.push(expr);
-				continue;		
 			}
-
-			if (try expr = self.parse_statement()) {
+			if(catch err = @try(expr, self.parse_statement())) {
+				io::printn(err);
+			} else {
 				self.ast.expressions.push(expr);
-				continue;
 			}
 		}
 	};
-	
 }
 
 //! Needs refactoring
@@ -163,7 +185,6 @@ fn Precedence? Parser.check_infix_op(&self, TokenKind tk, Precedence prec)
 //! TBD
 fn Expr*? Parser.parse_shell_call(&self, Token tk)
 {
-
 	List{ Expr* } args;
 	args.init(mem);
 	
@@ -284,7 +305,8 @@ fn Expr*? Parser.expr_head(&self)
 					}
 				});
 			}	
-						
+			io::printn("no expr_head");
+			io::printn(tk);		
 			return ast::INVALID_EXPRESSION~;
 	}
 }
@@ -293,7 +315,7 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 {
 	Expr* expr = self.expr_head()!;
 	//& { expr_tail }
-	while (try op = self.peek()) {
+	while (try op = self.peek(skip_lf: false)) {
 		//& "(" , [ argument_list ] , ")"
 		if (op.kind == TokenKind.OPEN_PHARANTESIS) {
 			self.advance()!;
@@ -342,8 +364,6 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
         	});
 			continue;
 		}
-
-	
 		//& postfix_op
 		if (try prec = self.check_postfix_op(op.kind)) {
 			self.advance()!;
@@ -357,6 +377,15 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 			});
 			continue;	
 		}
+
+		//! TODO: Check for a possible continuation "\",
+		// when pressent skip it and continue the expression,
+		// otherwise lookahead for permitted ops with implicit continuation, like (&&, ||) 
+		if (op.kind == NEW_LINE) {
+			//self.skip_spaces(skip_lf: true);
+			
+		}
+		
 		//& infix_op , expression
 		if (try prec = self.check_infix_op(op.kind, base_prec)) {
 			self.advance()!;
@@ -385,7 +414,7 @@ fn Expr*? Parser.parse_binding(&self)
 		case LET..ENV:
 			self.advance()!;
 		default:
-			// io::printn("No binding keyword");
+			io::printn("No binding keyword");
 			return ast::INVALID_EXPRESSION~; 
 	}
 
@@ -415,12 +444,14 @@ fn Expr*? Parser.parse_binding(&self)
 //! TODO
 fn Expr*? Parser.parse_assignment(&self)
 {
+	io::printn("assign not supported");
 	return ast::INVALID_EXPRESSION~;
 }
 
 fn Expr*? Parser.parse_return(&self)
 {
 	if (self.peek()!.kind != RETURN) {
+		io::printn("not a return");
 		return ast::INVALID_EXPRESSION~;
 	}
 	self.advance()!;
@@ -458,30 +489,25 @@ fn Expr*? Parser.parse_statement(&self)
 
 fn Expr*? Parser.parse_block(&self)
 {
-	
 	if (!self.follows(TokenKind.OPEN_BRACE)!) {
-		// io::printn("No {");
+		io::printn("No {");
 		return ast::INVALID_EXPRESSION~;
 	}
 
 	List{ Expr* } stmts;
 	stmts.init(mem);
     
+	do {
+		if (self.follows(TokenKind.CLOSED_BRACE, consume: false)!) break;
+		stmts.push(self.parse_statement()!);
+    } while (
+		self.follows(TokenKind.NEW_LINE, skip_lf: false)!
+		|| self.follows(TokenKind.SEMICOLON)!
+	);
 
-	if (!self.follows(TokenKind.CLOSED_BRACE)!) {
-	 	do {
-          	stmts.push(self.parse_statement()!);
-        } while (
-			self.follows(TokenKind.NEW_LINE, false)!
-			|| self.follows(TokenKind.SEMICOLON)!
-		);
-
-		
-		if(!self.follows(TokenKind.CLOSED_BRACE)!) {
-			io::printn(self.peek()!);
-			// io::printn("No }");
-			return ast::INVALID_EXPRESSION~;
-		}
+	if(!self.follows(TokenKind.CLOSED_BRACE)!) {
+		io::printn("No }");
+		return ast::INVALID_EXPRESSION~;
 	}
 	
 	return mem::new(Expr, {
@@ -497,6 +523,7 @@ fn void? Parser.parse_parameters(&self, List{ String }* params)
 	do {
 		Token tk = self.peek()!;
 		if (tk.kind != TokenKind.IDENTIFIER) {
+			io::printn("not an identifier");
 			return ast::INVALID_EXPRESSION~;
 		}
 		self.advance()!;
@@ -507,7 +534,7 @@ fn void? Parser.parse_parameters(&self, List{ String }* params)
 fn Expr*? Parser.parse_function(&self)
 {
 	if (!self.follows(TokenKind.FN)!) {
-		// io::printn("Not a function");
+		io::printn("Not a function");
 		return ast::INVALID_EXPRESSION~;
 	}
 	
@@ -535,7 +562,7 @@ fn Expr*? Parser.parse_function(&self)
 	}
 	
 	Expr* body = self.parse_block()!;	
-	
+	io::printn("success block");
 	return mem::new(Expr, {
 		.kind = ExprKind.FUNCTION,
 		.fun = {
