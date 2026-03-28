@@ -36,6 +36,7 @@ const Value UNIT = {
 
 fn Value _int(long _int) => { .kind = INT, ._int = _int };
 fn Value _float(double _float) => { .kind = FLOAT, ._float = _float };
+fn Value _string(String _string) => { .kind = STRING, ._string = _string};
 
 faultdef INCOMPATIBLE_TYPE;
 

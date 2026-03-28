@@ -11,7 +11,7 @@ struct Scope
 	Nullable{ Scope* } parent;	
 }
 
-<* The returned pointer from this function must be freed manually *>
+<* The returned ref must be freed explicitly *>
 fn Scope* new_ref(Allocator allocator, Nullable{ Scope* } parent = nullable::NULL)
 {
 	HashMap{ String, Value } bindings;	

@@ -1,16 +1,18 @@
 module cyqra::interpreter;
 import std::io;
 import std::math;
+import std::collections::list;
+import std::os::process;
 
 import cyqra::parser::ast;
 import utils;
 
-faultdef UNSUPORTED_OP;
-faultdef NOT_A_FUNCTION;
-faultdef INVALID_ARGS_COUNT;
-
-//! Temporary solution for the return from functions using faults
-faultdef RETURN_STATEMENT;
+faultdef UNSUPORTED_OP,
+		NOT_A_FUNCTION,
+		INVALID_ARGS_COUNT,
+		IDENTIFIER_NOT_FOUND,
+		//! Temporary solution for the return from functions using faults
+		RETURN_STATEMENT;
 
 struct Interpreter
 {
@@ -19,6 +21,7 @@ struct Interpreter
 
 	//! temporary solution
 	Value return_value;
+	String identifier;
 }
 
 fn Interpreter new(
@@ -95,7 +98,12 @@ fn Value? Interpreter.eval_primary(&self, Primary* expr)
 			._float = expr.token.slice.to_double()!
 		};
 		case IDENTIFIER:
-			return self.scope.get(expr.token.slice)!;
+			Value? val = self.scope.get(expr.token.slice);
+			if (catch val) {
+				self.identifier = expr.token.slice;
+				return IDENTIFIER_NOT_FOUND~;
+			}
+			return val;
 		default: unreachable("Unreachable reached in primary eval"); 
 	}
 }
@@ -207,7 +215,10 @@ fn Value? Interpreter.eval_block(&self, Block* expr, Nullable{ Scope* } scope = 
 	Scope* local_scope = scope.ptr;
 	if(scope.is_null()) {
 		local_scope = scope::new_ref(self.allocator, nullable::value(self.scope));
-		defer local_scope.free();
+		defer {
+			local_scope.free();
+			allocator::free(self.allocator, local_scope);
+		}
 	}
 	
 	self.scope = local_scope;
@@ -233,37 +244,67 @@ fn Value? Interpreter.eval_fn(&self, Function* expr)
 	return value::UNIT;
 } 
 
-//! TODO split and use contracts
+
 fn Value? Interpreter.eval_call(&self, Call* expr)
 {
-	if (try callee = self.eval(expr.callee)) {
-		if (!callee.is_fn()) {
-			return NOT_A_FUNCTION~;
-		}
-	
-		Scope* fn_scope = scope::new_ref(self.allocator, nullable::value(self.scope));
-		defer fn_scope.free();
+	Value? callee = self.eval(expr.callee);
+    fault err = @catch(callee);
 
-		if (callee._fn.params.len() != expr.args.len()) {
-			return INVALID_ARGS_COUNT~;
-		}
+    if (err && err != IDENTIFIER_NOT_FOUND) return err~;
 
-		foreach (i, arg_expr: expr.args) {
-			Value arg = self.eval(arg_expr)!;
-			fn_scope.set(callee._fn.params[i], arg);
-		}
+	List{ Value } args; args.init(self.allocator, expr.args.size + 1);
+    defer args.free();
 
-		Value returned = value::UNIT;
-		if (catch err = @try(returned, self.eval_block(callee._fn.body, nullable::value(fn_scope)))) {
-			if (err == RETURN_STATEMENT) {
-				return self.return_value;
-			}
-		}
-		return returned;
+	//@ Add dummy value for the external call
+	args.push(value::UNIT);
+	foreach (arg_expr: expr.args) {
+		args.push(self.eval(arg_expr)!);
 	}
-	//! TODO
-	// prob a shell call
-	
+
+    if (err == IDENTIFIER_NOT_FOUND) {
+		args[0] = value::_string(self.identifier);
+		return self.call_external(args.array_view());
+	}
+    if (!callee.is_fn()!!) return NOT_A_FUNCTION~;
+    return self.call_fn(callee._fn, args.array_view()[1..]);
+}
+
+
+fn Value? Interpreter.call_fn(&self, Fn _fn, Value[] args)
+{	
+	Scope* fn_scope = scope::new_ref(self.allocator, nullable::value(self.scope));
+	defer fn_scope.free();
+
+	if (_fn.params.len() != args.len) {
+		return INVALID_ARGS_COUNT~;
+	}
+	foreach (i, arg: args) {
+		fn_scope.set(_fn.params[i], arg);
+	}
+	Value returned = value::UNIT;
+	if (catch err = @try(returned, self.eval_block(_fn.body, nullable::value(fn_scope)))) {
+		if (err == RETURN_STATEMENT) {
+			return self.return_value;
+		}
+	}
+	return returned;
+}
+
+fn Value? Interpreter.call_external(&self, Value[] cmd_args)
+{
+	String[] cmd_line = alloc::new_array(self.allocator, String, cmd_args.len);
+	defer alloc::free(self.allocator, cmd_line);
+
+	foreach(i, arg: cmd_args) {
+		cmd_line[i] = arg.to_string(self.allocator);
+	}
+	defer foreach (arg: cmd_line) {
+		arg.free(self.allocator);
+	}
+
+	char[] buffer;
+	int? id = process::run(buffer, cmd_line, INHERIT_STDIO);
+
 	return value::UNIT;
 }
 
