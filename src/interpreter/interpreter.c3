@@ -265,6 +265,7 @@ fn Value? Interpreter.eval_call(&self, Call* expr)
 		args[0] = value::_string(self.identifier);
 		return self.call_external(args.array_view());
 	}
+	
     if (!callee.is_fn()!!) return NOT_A_FUNCTION~;
     return self.call_fn(callee._fn, args.array_view()[1..]);
 }

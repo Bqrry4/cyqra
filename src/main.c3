@@ -7,11 +7,6 @@ import cyqra::lexer;
 import cyqra::parser;
 import cyqra::interpreter;
 
-fn String[] parse(String *line)
-{
-    return line.tsplit(" ");
-}
-
 fn void exec(String[] args)
 {
     SubProcess? child = std::os::process::create(args, { .inherit_stdio = true });
@@ -57,10 +52,10 @@ fn void from_file(String content)
     Parser parser = parser::new(tmem, tokens);
     parser.parse();
 
-    foreach(expr: parser.ast.expressions)
-    {
-        expr.print();
-    }
+    // foreach(expr: parser.ast.expressions)
+    // {
+    //     expr.print();
+    // }
     
     Interpreter interpreter = interpreter::new(tmem);
     interpreter.interpret(parser.ast);
@@ -76,6 +71,6 @@ fn int main(String[] args)
     else {
         interactive();
     }
-    
+ 
     return 0;
 }

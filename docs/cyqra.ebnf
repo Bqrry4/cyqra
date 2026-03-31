@@ -37,7 +37,9 @@ binding = ("let" | "mut" | "env" | "alias") , identifier , "=" , (expression | b
 *)
 raw_token = ? any-chars except the above tokens ?
 
-shell_call = identifier , { " " , (sub_expression | raw_token) };
+shell_cmd = identifier | string | raw_token;
+shell_arg = ?? anything between spaces ?? ;
+shell_call = shell_cmd , { " " , shell_arg };
 
 sub_expression = "(" , expression , ")";
 expression = expr_head , { expr_tail };
