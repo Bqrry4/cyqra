@@ -82,10 +82,9 @@ fn void Lexer.emit(&self, TokenKind kind)
      self.cursor.sync_start();
 }
 
-
 fn void? Lexer.next_token(&self)
 {
-     char c = self.cursor.advance()!;
+     char c = self.cursor.advance();
      switch (self.ctx().mode) {
           case DEFAULT:
           case INTERPOLATION:
@@ -158,8 +157,8 @@ fn void? Lexer.lex_code(&self, char c)
           }                    
           default: switch {
                case ascii::is_space_m(c): self.lex_space(c);
-               case ascii::is_digit_m(c): self.lex_number()!;
-               case is_identifier_char(c): self.lex_identifier()!;
+               case ascii::is_digit_m(c): self.lex_number();
+               case is_identifier_char(c): self.lex_identifier();
                default: {
                     self.ctxs.switch_to(RAW);
                     self.lex_text(c)!;
@@ -187,9 +186,9 @@ fn void? Lexer.lex_text(&self, char c)
                     break;
                }
                
-               if (is_identifier_char(self.cursor.peek()!)) {     
+               if (is_identifier_char(self.cursor.peek())) {     
                     self.emit(INTERP_IDENT);
-                    self.lex_identifier()!;
+                    self.lex_identifier();
                }                 
           }
           case ' ': {
@@ -206,16 +205,14 @@ fn void? Lexer.lex_text(&self, char c)
 }
 
 
-fn bool? Lexer.is_string_breaker(&self)
+fn bool Lexer.is_string_breaker(&self)
 {
-     char c = self.cursor.peek()!;
+     char c = self.cursor.peek();
 
      // Only a breaker when there's a possible identifier or start of a block" 
      if (c == '$') {
-          if (try sc = self.cursor.peek(1)) {
-               return sc == '{' || is_identifier_char(sc);
-          }
-          return false;
+          char sc = self.cursor.peek(1);
+          return sc == '{' || is_identifier_char(sc);
      }
 
      if (self.ctx().mode == RAW) {
@@ -231,13 +228,13 @@ fn bool is_identifier_char(char c)
 }
 
 fn void? Lexer.lex_string_text(&self)
-{
-     defer self.emit(
-          (self.ctx().mode == RAW) ? TokenKind.RAW
-                                   : TokenKind.STRING_PART
-     );
+{ 
+     while(!self.is_string_breaker()) self.cursor.advance();
 
-     while(!self.is_string_breaker()!) self.cursor.advance()!;
+     self.emit((self.ctx().mode == RAW)
+          ? TokenKind.RAW
+          : TokenKind.STRING_PART
+     );
 }
 
 fn void Lexer.lex_space(&self, char c)
@@ -248,28 +245,33 @@ fn void Lexer.lex_space(&self, char c)
      }
 }
 
-fn void? Lexer.lex_number(&self)
+fn void Lexer.lex_number(&self)
 {
-     TokenKind kind = INTEGER;
+     TokenKind kind = INTEGER; 
 
-     defer self.emit(kind);
+     while (ascii::is_digit_m(
+          self.cursor.peek()
+     )) self.cursor.advance();
 
-     while (ascii::is_digit_m(self.cursor.peek()!)) self.cursor.advance()!;
-     if (self.cursor.peek()! == '.') {
+     if (self.cursor.peek() == '.') {
           kind = FLOAT;
-          self.cursor.advance()!;
-          while (ascii::is_digit_m(self.cursor.peek()!)) self.cursor.advance()!;
+          self.cursor.advance();
+
+          while (ascii::is_digit_m(
+               self.cursor.peek()
+          )) self.cursor.advance();
      }
+     self.emit(kind);
 }
 
 
-fn void? Lexer.lex_identifier(&self)
+fn void Lexer.lex_identifier(&self)
 {
-     defer self.emit(
-          check_keywords(self.cursor.captured())
-     );
-     
-     while(is_identifier_char(self.cursor.peek()!)) self.cursor.advance()!;
+     while (is_identifier_char(
+          self.cursor.peek()
+     )) self.cursor.advance();
+
+     self.emit(check_keywords(
+          self.cursor.captured()
+     ));
 }
-
-

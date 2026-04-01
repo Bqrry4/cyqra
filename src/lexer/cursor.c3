@@ -10,14 +10,14 @@ struct Cursor
 }
 
 fn bool Cursor.eof(&self, int n = 0) => (self.current >= self.end);
-fn char? Cursor.advance(&self)
+fn char Cursor.advance(&self)
 {
-     if(self.eof()) return REACHED_EOF~;
+     if(self.eof()) return '\0';
      return *(self.current++); 
 }
-fn char? Cursor.peek(&self, int n = 0)
+fn char Cursor.peek(&self, int n = 0)
 {
-     if(self.eof(n)) return REACHED_EOF~;
+     if(self.eof(n)) return '\0';
      return *(self.current + n);  
 } 
 fn bool Cursor.follows(&self, char expect)
