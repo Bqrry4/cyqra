@@ -1,5 +1,6 @@
 module cyqra::parser::cursor;
 import std::collections::list;
+import std::io;
 
 import cyqra::lexer::token;
 
@@ -54,6 +55,6 @@ fn void Cursor.skip_spaces(&self, bool skip_lf = true)
 fn String Cursor.expr_span(&self)
 {
 	String left = self.tokens[self.start].slice;
-	String right = self.tokens[self.current].slice;
-	return left[..(right.ptr - left.ptr) + right.len];	
+	String right = self.tokens[self.current - (usz)1].slice;
+	return (String)left.ptr[..(right.ptr - left.ptr) + right.len];	
 }

@@ -1,19 +1,30 @@
 module cyqra::lexer::cursor;
 
-faultdef REACHED_EOF;
-
 struct Cursor
 {
      char* start;
      char* current;
      char* end;
+
+     uint line;
+     uint column;
 }
 
 fn bool Cursor.eof(&self, int n = 0) => (self.current >= self.end);
 fn char Cursor.advance(&self)
 {
      if(self.eof()) return '\0';
-     return *(self.current++); 
+
+     char c = *(self.current++);
+     if (c == '\n') {
+          self.line++;
+          self.column = 1;
+     }
+     else {
+          self.column++;
+     }
+
+     return c; 
 }
 fn char Cursor.peek(&self, int n = 0)
 {
@@ -23,8 +34,7 @@ fn char Cursor.peek(&self, int n = 0)
 fn bool Cursor.follows(&self, char expect)
 {
      char? c = self.peek();
-     if (catch c) return false;
-     bool follows = (c == expect);
+     bool follows = @ok(c) && (c!! == expect);
      if (follows) self.current++;
      return follows;
 }

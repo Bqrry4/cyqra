@@ -53,6 +53,9 @@ enum TokenKind : int @public
 struct Token
 {
      TokenKind kind;
-     String slice;        
+     String slice;
+
+     uint line;
+     uint column;
 }
 

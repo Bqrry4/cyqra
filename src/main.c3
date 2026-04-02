@@ -32,14 +32,14 @@ fn void interactive() => @pool()
         //     io::print(t);   
         // }
         
-        Parser parser = parser::new(tmem, tokens);
+        Parser parser = parser::new(tmem, tokens, {.src_name = "repl"});
         parser.parse();
 
         interpreter.interpret(parser.ast);
    }
 }
 
-fn void from_file(String content)
+fn void from_file(String file_name, String content)
 {
     
     Lexer lexer = lexer::new(tmem, content);
@@ -49,7 +49,7 @@ fn void from_file(String content)
      // {
       // io::print(t);   
      // }
-    Parser parser = parser::new(tmem, tokens);
+    Parser parser = parser::new(tmem, tokens, {.src_name = file_name});
     parser.parse();
 
     // foreach(expr: parser.ast.expressions)
@@ -66,7 +66,7 @@ fn int main(String[] args)
     if(args.len == 2) {
         String s_path = args[1];
         char[]? file = file::load(tmem, s_path);
-        from_file((String)file!!);
+        from_file(s_path, (String)file!!);
     }
     else {
         interactive();

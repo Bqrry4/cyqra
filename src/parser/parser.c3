@@ -82,6 +82,9 @@ fn void Parser.fill_diagnostic(&self, String msg)
 {
 	self.diagnostic.msg = msg;
 	self.diagnostic.span = self.cursor.expr_span();
+	Token cause = self.cursor.peek(skip_wp: false)!!;
+	self.diagnostic.line = cause.line;
+	self.diagnostic.column = cause.column;
 }
 
 fn void Parser.parse(&self)
@@ -100,7 +103,9 @@ fn void Parser.parse(&self)
 	
 			if(catch err = expr) {
 				io::printn(err);
-				io::printn(self.diagnostic);
+				if (err == ast::INVALID_EXPRESSION) {
+					io::printn(self.diagnostic);
+				}
 			} else {
 				self.ast.expressions.push(expr);
 			}
@@ -162,7 +167,7 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 		if (self.cursor.follows(TokenKind.OPEN_PHARANTESIS, skip_lf: false)) {
 			args.push(self.parse_expression()!);
 			if (!self.cursor.follows(TokenKind.CLOSED_PHARANTESIS)) {
-				io::printn("Missing ) on shell arg");
+				self.fill_diagnostic("expected ')'");
 				return ast::INVALID_EXPRESSION~;
 			}
 			continue;
@@ -184,7 +189,7 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 						.interp = self.parse_expression()! 
 					};
 					if (!self.cursor.follows(INTERP_END)) {
-						io::printn("Was expecting Close bracket");
+						self.fill_diagnostic("expected ']'");
 						return ast::INVALID_EXPRESSION~;			
 					}
 				}
@@ -253,7 +258,7 @@ fn Expr*? Parser.expr_head(&self)
 							.interp = self.parse_expression()! 
 						};
 						if (!self.cursor.follows(INTERP_END)) {
-							io::printn("Was expecting Close bracket");
+							self.fill_diagnostic("expected '}'");
 							return ast::INVALID_EXPRESSION~;			
 						}
 					case INTERP_IDENT:
@@ -262,7 +267,6 @@ fn Expr*? Parser.expr_head(&self)
 							.interp = self.parse_expression()!
 						};
 					default:
-						io::printn(tk);
 						unreachable("Unexpected token in string body");
 				}
 				parts.push(part);
@@ -293,16 +297,14 @@ fn Expr*? Parser.expr_head(&self)
 		//& sub_expression 
 		case OPEN_PHARANTESIS:
 			Expr* expr = self.parse_expression()!;
-			if(!self.cursor.follows(CLOSED_PHARANTESIS))
-			{
-				io::printn("Was expecting Closed pharantesis");
+			if(!self.cursor.follows(CLOSED_PHARANTESIS)) {
+				self.fill_diagnostic("expected ')'");
 				return ast::INVALID_EXPRESSION~;
 			}	
 			return expr;
 		default:
 			//& prefix_op , expression
-			if(try prec = self.check_prefix_op(tk.kind))
-			{
+			if(try prec = self.check_prefix_op(tk.kind)) {
 				Expr* rhs = self.parse_expression(prec)!;
 				return mem::new(Expr, {
 					.kind = ExprKind.PREFIX,
@@ -311,9 +313,8 @@ fn Expr*? Parser.expr_head(&self)
 						.rhs = rhs 
 					}
 				});
-			}	
-			io::printn("no expr_head");
-			io::printn(tk);		
+			}
+			self.fill_diagnostic("unexpected token");
 			return ast::INVALID_EXPRESSION~;
 	}
 }
@@ -337,7 +338,7 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
     	        } while (self.cursor.follows(TokenKind.COMMA));
 
 				if(!self.cursor.follows(CLOSED_PHARANTESIS)) {
-					io::printn("Was expecting Close pharantesis");
+					self.fill_diagnostic("expected ')'");
 					return ast::INVALID_EXPRESSION~;				
 				}
          	}
@@ -357,7 +358,7 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 			
 			Expr* index = self.parse_expression()!;
 			if(!self.cursor.follows(CLOSED_BRACKET)) {
-				io::printn("Was expecting Close bracket");
+				self.fill_diagnostic("expected '}'");
 				return ast::INVALID_EXPRESSION~;				
 			}
 
@@ -420,18 +421,18 @@ fn Expr*? Parser.parse_binding(&self)
 		case LET..ENV:
 			self.cursor.advance()!;
 		default:
-			io::printn("No binding keyword");
+			// io::printn("No binding keyword");
 			return ast::INVALID_EXPRESSION~; 
 	}
 
 	Token identifier = self.cursor.advance()!;
 	if (identifier.kind != TokenKind.IDENTIFIER) {
-		io::printn("Identifier missing after binding");
+		self.fill_diagnostic("expected identifier after binding keyword");
 		return ast::INVALID_EXPRESSION~;
 	}
 	
 	if (!self.cursor.follows(TokenKind.EQ)) {
-		io::printn("= missing after binding");
+		self.fill_diagnostic("missing '='");
 		return ast::INVALID_EXPRESSION~;
 	}
 
@@ -451,7 +452,7 @@ fn Expr*? Parser.parse_binding(&self)
 //! TODO
 fn Expr*? Parser.parse_assignment(&self)
 {
-	io::printn("assign not supported");
+	// io::printn("assign not supported");
 	return ast::INVALID_EXPRESSION~;
 }
 
@@ -506,7 +507,7 @@ fn Expr*? Parser.parse_block(&self)
 	);
 
 	if(!self.cursor.follows(TokenKind.CLOSED_BRACE)) {
-		io::printn("No }");
+		self.fill_diagnostic("expected '}'");
 		return ast::INVALID_EXPRESSION~;
 	}
 	
@@ -523,7 +524,7 @@ fn void? Parser.parse_parameters(&self, List{ String }* params)
 	do {
 		Token tk = self.cursor.peek()!;
 		if (tk.kind != TokenKind.IDENTIFIER) {
-			io::printn("not an identifier");
+			self.fill_diagnostic("expected identifier");
 			return ast::INVALID_EXPRESSION~;
 		}
 		self.cursor.advance()!;
@@ -535,13 +536,12 @@ fn Expr*? Parser.parse_function(&self)
 {
 	Token identifier = self.cursor.advance()!;
 	if (identifier.kind != TokenKind.IDENTIFIER) {
-		
-		io::printn("Function name missing");
+		self.fill_diagnostic("function name not provided");
 		return ast::INVALID_EXPRESSION~;
 	}
 
 	if (!self.cursor.follows(TokenKind.OPEN_PHARANTESIS)) {
-		io::printn("No (");
+		self.fill_diagnostic("missing '(' after function declaration");
 		return ast::INVALID_EXPRESSION~;
 	}
 
@@ -552,7 +552,7 @@ fn Expr*? Parser.parse_function(&self)
 		self.parse_parameters(&params)!;
 
 		if (!self.cursor.follows(TokenKind.CLOSED_PHARANTESIS)) {
-			io::printn("No )");
+			self.fill_diagnostic("expected ')'");
 			return ast::INVALID_EXPRESSION~;
 		}
 	}
