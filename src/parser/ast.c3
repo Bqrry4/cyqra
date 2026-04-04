@@ -23,6 +23,11 @@ fn Ast new(Allocator allocator)
 	};
 }
 
+fn void Ast.clear(&self)
+{
+	self.expressions.clear();
+}
+
 fn void Ast.free(&self)
 {
 	self.expressions.free();

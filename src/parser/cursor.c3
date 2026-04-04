@@ -14,6 +14,11 @@ struct Cursor
 	uint current;
 }
 
+fn void Cursor.reset(&self)
+{
+	self.start = 0;
+	self.current = 0;
+}
 fn Token? Cursor.advance(&self, bool skip_lf = true)
 {
 	self.skip_spaces(skip_lf);		

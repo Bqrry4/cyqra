@@ -27,7 +27,7 @@ struct Parser
 	Diagnostic diagnostic;
 }
 
-fn Parser new(Allocator allocator, List{ Token } tokens, Diagnostic diagnostic)
+fn Parser new(Allocator allocator, Diagnostic diagnostic)
 {		
 	EnumMap{ TokenKind, _Operator_ } prefix_ops;
 	prefix_ops.init(maybe::EMPTY);
@@ -61,10 +61,6 @@ fn Parser new(Allocator allocator, List{ Token } tokens, Diagnostic diagnostic)
 	Namespace* nms = namespace::new_ref(allocator);
 	return {
 		.allocator = allocator,
-		.cursor = {
-			.tokens = tokens,
-		},
-		.ast = ast,
 		.nms = nms,
 		.prefix_ops = prefix_ops,
 		.postfix_ops = postfix_ops,
@@ -86,28 +82,44 @@ fn void Parser.fill_diagnostic(&self, String msg)
 	self.diagnostic.line = cause.line;
 	self.diagnostic.column = cause.column;
 }
-
-fn void Parser.parse(&self)
+<*
+	Tokens -> Ast.
+	@param tokens
+*>
+fn void Parser.parse(&self, List{ Token } tokens)
 {
+	self.cursor.tokens = tokens;
+	self.cursor.reset();
+	self.ast.clear();
+
 	mem::@scoped(self.allocator)
 	{
 		while(!self.cursor.eot()) {
-			Expr*? expr;
+			Expr* expr;
+			fault error;
 			switch {
-				case self.cursor.follows(FN): expr = self.parse_function();
-				case self.cursor.follows(OPEN_BRACE): expr = self.parse_block();
-				//& statement
-				case self.cursor.follows(RETURN): expr = self.parse_return();
-				default: expr = self.parse_statement();
-			}
-	
-			if(catch err = expr) {
-				io::printn(err);
-				if (err == ast::INVALID_EXPRESSION) {
-					io::printn(self.diagnostic);
+				case self.cursor.follows(FN): {
+					error = @catch(
+						@try(expr, self.parse_function())
+					);
+					if (!error) self.ast.expressions.push(expr);
 				}
-			} else {
-				self.ast.expressions.push(expr);
+				case self.cursor.follows(OPEN_BRACE): {
+					error = @catch(
+						@try(expr, self.parse_block())
+					);
+					if (!error) self.ast.expressions.push(expr);
+				}
+				
+				default: {
+					error = @catch(
+						self.parse_statement_list(&self.ast.expressions)
+					);
+				}
+			}
+				
+			if(error == ast::INVALID_EXPRESSION) {
+				io::printn(self.diagnostic);
 			}
 		}
 	};
@@ -289,7 +301,7 @@ fn Expr*? Parser.expr_head(&self)
 			});
 
 			if (self.nms.has(tk.slice) ||
-				self.cursor.follows(TokenKind.OPEN_PHARANTESIS, skip_wp: false)
+				self.cursor.follows(TokenKind.OPEN_PHARANTESIS, consume:false, skip_wp: false)
 			) return primary;
 
 			return self.parse_shell_call(primary);
@@ -314,6 +326,8 @@ fn Expr*? Parser.expr_head(&self)
 					}
 				});
 			}
+			// ast::INVALID_EXPRESSION~!!;
+			io::printn(tk);
 			self.fill_diagnostic("unexpected token");
 			return ast::INVALID_EXPRESSION~;
 	}
@@ -473,44 +487,62 @@ fn Expr*? Parser.parse_return(&self)
 
 fn Expr*? Parser.parse_statement(&self)
 {
-	if (try binding = self.parse_binding()) {
-		return binding;
-	}	
+	switch {
+		case self.cursor.follows(RETURN): return self.parse_return();
+		default: {
+			if (try binding = self.parse_binding()) {
+				return binding;
+			}	
 
-	if (try assignment = self.parse_assignment()) {
-		return assignment;
+			if (try assignment = self.parse_assignment()) {
+				return assignment;
+			}
+
+			return self.parse_expression();
+		}
 	}
-
-	return self.parse_expression();
 }
 
-
-fn Expr*? Parser.parse_block(&self)
+<*
+	@param [&inout] stmts
+	@param ... : "Provide additional terminator"
+*>
+macro void? Parser.parse_statement_list(&self, List{ Expr* }* stmts, ...)
 {
-	Namespace* nms = namespace::new_ref(self.allocator, nullable::value(self.nms));
-	self.nms = nms;
-	defer {
-		self.nms = nms.parent.ptr;
-		nms.free();
-	};
-	
-
-	List{ Expr* } stmts;
-	stmts.init(mem);
-    
 	do {
-		if (self.cursor.follows(TokenKind.CLOSED_BRACE, consume: false)) break;
+	    $for var $i = 0; $i < $vacount; $i++:
+			if (self.cursor.follows($vaconst[$i], consume: false)) break;
+    	$endfor
 		stmts.push(self.parse_statement()!);
-    } while (
-		self.cursor.follows(TokenKind.NEW_LINE, skip_lf: false)
+    } while (self.cursor.follows(TokenKind.NEW_LINE, skip_lf: false)
 		|| self.cursor.follows(TokenKind.SEMICOLON)
 	);
+}
 
-	if(!self.cursor.follows(TokenKind.CLOSED_BRACE)) {
+fn Expr*? Parser.parse_block(&self, Nullable{ Namespace* } nms = nullable::NULL)
+{
+	Namespace* local_nms = nms.ptr;
+	if(nms.is_null()) {
+		local_nms = namespace::new_ref(self.allocator, nullable::value(self.nms));
+		defer {
+			local_nms.free();
+			alloc::free(self.allocator, local_nms);
+		}
+	}
+	
+	self.nms = local_nms;
+	defer {
+		self.nms = local_nms.parent.ptr;
+	};
+	
+	List{ Expr* } stmts; stmts.init(mem);
+
+	self.parse_statement_list(&stmts, TokenKind.CLOSED_BRACE)!;
+	if (!self.cursor.follows(TokenKind.CLOSED_BRACE)) {
 		self.fill_diagnostic("expected '}'");
 		return ast::INVALID_EXPRESSION~;
 	}
-	
+
 	return mem::new(Expr, {
 		.kind = ExprKind.BLOCK,
 		.block = {
@@ -556,9 +588,20 @@ fn Expr*? Parser.parse_function(&self)
 			return ast::INVALID_EXPRESSION~;
 		}
 	}
+
+	if(!self.cursor.follows(OPEN_BRACE)) {
+		self.fill_diagnostic("expected block");
+		return ast::INVALID_EXPRESSION~;
+	}
 	
-	Expr* body = self.parse_block()!;	
-	
+	Namespace* fn_nms = namespace::new_ref(self.allocator, nullable::value(self.nms));
+	defer fn_nms.free();
+
+	foreach (param: params) {
+		fn_nms.add(param);
+	}
+
+	Expr* body = self.parse_block(nullable::value(fn_nms))!;	
 	return mem::new(Expr, {
 		.kind = ExprKind.FUNCTION,
 		.fun = {

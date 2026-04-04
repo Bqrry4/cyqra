@@ -7,19 +7,10 @@ import cyqra::lexer;
 import cyqra::parser;
 import cyqra::interpreter;
 
-fn void exec(String[] args)
-{
-    SubProcess? child = std::os::process::create(args, { .inherit_stdio = true });
-    if (catch err = child) {
-        io::printn("err");
-    }
-    (void)child.join();
-}
-
 fn void interactive() => @pool()
 {
     Interpreter interpreter = interpreter::new(tmem);
-
+    Parser parser = parser::new(tmem, {.src_name = "repl"});
     while (true) {
         io::print("> ");
         // read
@@ -27,14 +18,8 @@ fn void interactive() => @pool()
 
         Lexer lexer = lexer::new(tmem, line);
         List{Token} tokens = lexer.analyze();
-        // foreach(t:tokens)
-        // {
-        //     io::print(t);   
-        // }
-        
-        Parser parser = parser::new(tmem, tokens, {.src_name = "repl"});
-        parser.parse();
 
+        parser.parse(tokens);     
         interpreter.interpret(parser.ast);
    }
 }
@@ -47,14 +32,14 @@ fn void from_file(String file_name, String content)
 
      // foreach(t:tokens)
      // {
-      // io::print(t);   
+     //  io::print(t);   
      // }
-    Parser parser = parser::new(tmem, tokens, {.src_name = file_name});
-    parser.parse();
+    Parser parser = parser::new(tmem, {.src_name = file_name});
+    parser.parse(tokens);
 
     // foreach(expr: parser.ast.expressions)
     // {
-    //     expr.print();
+        // expr.print();
     // }
     
     Interpreter interpreter = interpreter::new(tmem);

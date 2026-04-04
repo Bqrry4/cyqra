@@ -64,6 +64,8 @@ fn LexContext* Lexer.ctx(&self) => &self.ctxs[self.ctxs.len() - 1];
 
 fn List{ Token } Lexer.analyze(&self)
 {
+     self.output.clear();
+     
      while (!self.cursor.eof()) {
          if (catch self.next_token()) break;
      }

@@ -38,7 +38,7 @@ fn Interpreter new(
 fn void Interpreter.free(&self)
 {
 	self.scope.free();
-	allocator::free(self.allocator, self.scope);
+	alloc::free(self.allocator, self.scope);
 }
 
 fn void Interpreter.interpret(&self, Ast ast)
@@ -192,7 +192,6 @@ fn Value? Interpreter.eval_infix(&self, Infix* expr)
 		}
 		default: unreachable("Unreacahble reached in infix eval");	
 	}
-	unreachable("Shouldnt trigger infix");
 }
 
 fn Value? Interpreter.eval_binding(&self, Binding* expr)
@@ -217,23 +216,25 @@ fn Value? Interpreter.eval_block(&self, Block* expr, Nullable{ Scope* } scope = 
 		local_scope = scope::new_ref(self.allocator, nullable::value(self.scope));
 		defer {
 			local_scope.free();
-			allocator::free(self.allocator, local_scope);
+			alloc::free(self.allocator, local_scope);
 		}
 	}
 	
 	self.scope = local_scope;
-
+	defer {
+		self.scope = local_scope.parent.ptr;
+	}
+	
 	Value last = value::UNIT;
 	foreach (stmt: expr.stmts) {
 		last = self.eval(stmt)!;
 	}
 
-	self.scope = local_scope.parent.ptr;
 	return last;	
 }
 
 fn Value? Interpreter.eval_fn(&self, Function* expr)
-{	
+{
 	self.scope.set(expr.identifier.slice, {
 		.kind = FUNCTION,
 		._fn = {
@@ -247,8 +248,10 @@ fn Value? Interpreter.eval_fn(&self, Function* expr)
 
 fn Value? Interpreter.eval_call(&self, Call* expr)
 {
-	Value? callee = self.eval(expr.callee);
-    fault err = @catch(callee);
+	Value callee; 
+    fault err = @catch(
+		@try(callee, self.eval(expr.callee))
+	);
 
     if (err && err != IDENTIFIER_NOT_FOUND) return err~;
 
@@ -266,8 +269,8 @@ fn Value? Interpreter.eval_call(&self, Call* expr)
 		return self.call_external(args.array_view());
 	}
 	
-    if (!callee.is_fn()!!) return NOT_A_FUNCTION~;
-    return self.call_fn(callee._fn, args.array_view()[1..]);
+	if (!callee.is_fn()) return NOT_A_FUNCTION~;
+	return self.call_fn(callee._fn, args.array_view()[1..]);
 }
 
 
@@ -304,7 +307,7 @@ fn Value? Interpreter.call_external(&self, Value[] cmd_args)
 	}
 
 	char[] buffer;
-	int? id = process::run(buffer, cmd_line, INHERIT_STDIO);
+	int? id = process::run(cmd_line, INHERIT_STDIO);
 
 	return value::UNIT;
 }

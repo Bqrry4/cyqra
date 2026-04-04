@@ -14,7 +14,7 @@ fn Namespace* new_ref(Allocator allocator, Nullable{ Namespace* } parent = nulla
 	HashSet{ String } set;
 	set.init(allocator);
 
-	return allocator::new(allocator, Namespace, {
+	return alloc::new(allocator, Namespace, {
 		.parent = parent,
 		.set = set
 	});

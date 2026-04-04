@@ -17,7 +17,7 @@ fn Scope* new_ref(Allocator allocator, Nullable{ Scope* } parent = nullable::NUL
 	HashMap{ String, Value } bindings;	
 	bindings.init(allocator);
 	
-	return allocator::new(allocator, Scope, {
+	return alloc::new(allocator, Scope, {
 		.allocator = allocator,
 		.bindings  = bindings,
 		.parent = parent
