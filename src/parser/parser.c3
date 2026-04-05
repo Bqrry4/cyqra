@@ -169,6 +169,17 @@ fn bool is_shell_call_terminator(TokenKind kind)
 	};
 }
 
+
+/*
+
+	call asfsaf -ff34f45
+	while(space)
+	{
+		do: consume every token while: until shell_terminator
+	}
+*/
+
+
 fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 {
 	List{ Expr* } args;
@@ -185,7 +196,8 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 			continue;
 		}
 
-		Token tk = self.cursor.peek(skip_lf: false)!;
+		Token tk;
+		if(catch @try(tk, self.cursor.peek(skip_lf: false))) break;
 		if (is_shell_call_terminator(tk.kind)) break;
 
 		List{ StringPart } parts;
@@ -216,7 +228,8 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 			}
 			
 			parts.push(part);
-			tk = self.cursor.peek(skip_wp: false)!;
+			
+			if(catch @try(tk, self.cursor.peek(skip_wp: false))) break;
 		} while (!is_shell_call_terminator(tk.kind));
 
 		args.push(mem::new(Expr, {
