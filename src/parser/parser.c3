@@ -1,7 +1,5 @@
 module cyqra::parser;
 import std::collections::list;
-import std::collections::enummap;
-import std::collections::maybe;
 import std::collections::set;
 import std::io;
 
@@ -9,17 +7,11 @@ import cyqra::lexer::token;
 import cyqra::diagnostic;
 import utils::nullable;
 
-alias _Operator_ = Maybe{ Operator };
-
 struct Parser
 {
 	Allocator allocator;
 
-	//! Make this better later
-	EnumMap{ TokenKind, _Operator_ } prefix_ops;
-	EnumMap{ TokenKind, _Operator_ } postfix_ops;
-	EnumMap{ TokenKind, _Operator_ } infix_ops;
-
+	OperatorDef ops_def;
 	Ast ast;
 	Namespace* nms;
 	
@@ -28,43 +20,14 @@ struct Parser
 }
 
 fn Parser new(Allocator allocator, Diagnostic diagnostic)
-{		
-	EnumMap{ TokenKind, _Operator_ } prefix_ops;
-	prefix_ops.init(maybe::EMPTY);
-	EnumMap{ TokenKind, _Operator_ } postfix_ops;
-	postfix_ops.init(maybe::EMPTY);
-	EnumMap{ TokenKind, _Operator_ } infix_ops;
-	infix_ops.init(maybe::EMPTY);
-
-	postfix_ops[OPEN_PHARANTESIS] = maybe::value({15, LEFT});
-	postfix_ops[OPEN_BRACKET] = maybe::value({15, LEFT});
-	postfix_ops[DOT] = maybe::value({15, LEFT});
-	postfix_ops[PLUS_PLUS] = maybe::value({15, LEFT});
-	postfix_ops[MINUS_MINUS] = maybe::value({15, LEFT});
-	postfix_ops[EXCLAMATION] = maybe::value({16, LEFT});
-
-	prefix_ops[PLUS] = maybe::value({14, RIGHT});
-	prefix_ops[MINUS] = maybe::value({14, RIGHT});
-	prefix_ops[PLUS_PLUS] = maybe::value({14, RIGHT});
-	prefix_ops[MINUS_MINUS] = maybe::value({14, RIGHT});
-	prefix_ops[EXCLAMATION] = maybe::value({14, RIGHT});
-
-
-	infix_ops[STAR_STAR] = maybe::value({13, LEFT});
-	infix_ops[STAR] = maybe::value({12, LEFT});
-	infix_ops[SLASH] = maybe::value({12, LEFT});
-	infix_ops[PERCENT] = maybe::value({12, LEFT});
-	infix_ops[PLUS] = maybe::value({11, LEFT});
-	infix_ops[MINUS] = maybe::value({11, LEFT});
-
+{
+	OperatorDef ops_def = op::new();
 	Ast ast = ast::new(allocator);
 	Namespace* nms = namespace::new_ref(allocator);
 	return {
 		.allocator = allocator,
 		.nms = nms,
-		.prefix_ops = prefix_ops,
-		.postfix_ops = postfix_ops,
-		.infix_ops = infix_ops,
+		.ops_def = ops_def,
 		.diagnostic = diagnostic
 	};
 }
@@ -125,39 +88,6 @@ fn void Parser.parse(&self, List{ Token } tokens)
 	};
 }
 
-//! Needs refactoring
-fn Precedence? Parser.check_prefix_op(&self, TokenKind tk)
-{
-	_Operator_ maybe_op = self.prefix_ops[tk];
-	if (!maybe_op.has_value) return NOT_FOUND~;
-	Operator op = maybe_op.value;
-	return op.prec;
-}
-
-fn Precedence? Parser.check_postfix_op(&self, TokenKind tk)
-{
-	_Operator_ maybe_op = self.postfix_ops[tk];
-	if (!maybe_op.has_value) return NOT_FOUND~;
-	Operator op = maybe_op.value;
-	return op.prec;
-}
-
-fn Precedence? Parser.check_infix_op(&self, TokenKind tk, Precedence prec)
-{
-	_Operator_ maybe_op = self.infix_ops[tk];
-	if (!maybe_op.has_value) return NOT_FOUND~;
-	
-	Operator op = maybe_op.value;
-	bool is_higher = op.prec > prec;
-	bool is_right = op.as == Associativity.RIGHT;
-	bool is_equal = op.prec == prec;
-
-	if (is_higher || (is_right && is_equal)) {
-		return op.prec;	
-	}
-	
-	return NOT_FOUND~;
-}
 <* [ \n;|})] *>
 fn bool is_shell_call_terminator(TokenKind kind)
 {
@@ -168,17 +98,6 @@ fn bool is_shell_call_terminator(TokenKind kind)
 		default: return false;
 	};
 }
-
-
-/*
-
-	call asfsaf -ff34f45
-	while(space)
-	{
-		do: consume every token while: until shell_terminator
-	}
-*/
-
 
 fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 {
@@ -329,7 +248,7 @@ fn Expr*? Parser.expr_head(&self)
 			return expr;
 		default:
 			//& prefix_op , expression
-			if(try prec = self.check_prefix_op(tk.kind)) {
+			if(try prec = self.ops_def.check_prefix_op(tk.kind)) {
 				Expr* rhs = self.parse_expression(prec)!;
 				return mem::new(Expr, {
 					.kind = ExprKind.PREFIX,
@@ -399,7 +318,7 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 			continue;
 		}
 		//& postfix_op
-		if (try prec = self.check_postfix_op(op.kind)) {
+		if (try prec = self.ops_def.check_postfix_op(op.kind)) {
 			self.cursor.advance()!;
 			
 			expr = mem::new(Expr, {
@@ -413,7 +332,7 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 		}
 
 		//! TODO: Check for a possible continuation "\",
-		// when pressent skip it and continue the expression,
+		// when present skip it and continue the expression,
 		// otherwise lookahead for permitted ops with implicit continuation, like (&&, ||) 
 		if (op.kind == NEW_LINE) {
 			//self.skip_spaces(skip_lf: true);
@@ -421,7 +340,7 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 		}
 		
 		//& infix_op , expression
-		if (try prec = self.check_infix_op(op.kind, base_prec)) {
+		if (try prec = self.ops_def.check_infix_op(op.kind, base_prec)) {
 			self.cursor.advance()!;
 			
 			Expr* rhs = self.parse_expression(prec)!;
