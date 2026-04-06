@@ -158,7 +158,8 @@ fn void? Lexer.lex_code(&self, char c)
           case '"': {
                self.ctxs.switch_to(STRING);              
                self.emit(D_QUOTES);
-          }                    
+          }
+          case '#': self.lex_comment();                    
           default: switch {
                case ascii::is_space_m(c): self.lex_space(c);
                case ascii::is_digit_m(c): self.lex_number();
@@ -278,4 +279,9 @@ fn void Lexer.lex_identifier(&self)
      self.emit(check_keywords(
           self.cursor.captured()
      ));
+}
+
+fn void Lexer.lex_comment(&self)
+{
+     while(self.cursor.peek() != '\n') self.cursor.advance();
 }
