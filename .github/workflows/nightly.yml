@@ -1,0 +1,41 @@
+name: Nightly
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: "experimental-features = nix-command flakes"
+      - run: |
+          nix build
+          tar -czf cyqra-linux-x86_64.tar.gz --directory result/bin .
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cyqra-linux
+          path: cyqra-linux-x86_64.tar.gz
+
+  release:
+    runs-on: ubuntu-slim
+    needs: [ build ]
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
+        with:
+          path: dst/
+      - run: gh release delete nightly --cleanup-tag -y || true
+      - run: |
+          gh release create nightly --prerelease \
+                --title "Nightly build" \
+                --target main \
+                dst/**
+    
