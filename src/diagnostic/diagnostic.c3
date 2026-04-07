@@ -13,7 +13,7 @@ struct Diagnostic (Printable)
 	String span;
 }
 
-fn usz? Diagnostic.to_format(&self, Formatter* formatter) @dynamic
+fn sz? Diagnostic.to_format(&self, Formatter* formatter) @dynamic
 {
 	usz n = 0;
 	n += formatter.printf("   ╭─[\e[0m%s:%d:%d\e[0m]\n", self.src_name, self.line, self.column)!;

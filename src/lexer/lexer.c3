@@ -1,7 +1,6 @@
 module cyqra::lexer;
 import std::collections::list;
 import std::io;
-import std::ascii;
 import libc;
 
 enum Mode
@@ -161,8 +160,8 @@ fn void? Lexer.lex_code(&self, char c)
           }
           case '#': self.lex_comment();                    
           default: switch {
-               case ascii::is_space_m(c): self.lex_space(c);
-               case ascii::is_digit_m(c): self.lex_number();
+               case ascii::is_space(c): self.lex_space(c);
+               case ascii::is_digit(c): self.lex_number();
                case is_identifier_char(c): self.lex_identifier();
                default: {
                     self.ctxs.switch_to(RAW);
@@ -221,7 +220,7 @@ fn bool Lexer.is_string_breaker(&self)
      }
 
      if (self.ctx().mode == RAW) {
-          return ascii::is_space_m(c);          
+          return ascii::is_space(c);          
      }
      
      return c == '\\' || c == '"'; 
@@ -229,7 +228,7 @@ fn bool Lexer.is_string_breaker(&self)
 
 fn bool is_identifier_char(char c)
 {
-     return ascii::is_alnum_m(c) || c == '_';
+     return ascii::is_alnum(c) || c == '_';
 }
 
 fn void? Lexer.lex_string_text(&self)
@@ -254,7 +253,7 @@ fn void Lexer.lex_number(&self)
 {
      TokenKind kind = INTEGER; 
 
-     while (ascii::is_digit_m(
+     while (ascii::is_digit(
           self.cursor.peek()
      )) self.cursor.advance();
 
@@ -262,7 +261,7 @@ fn void Lexer.lex_number(&self)
           kind = FLOAT;
           self.cursor.advance();
 
-          while (ascii::is_digit_m(
+          while (ascii::is_digit(
                self.cursor.peek()
           )) self.cursor.advance();
      }
