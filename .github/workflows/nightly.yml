@@ -34,8 +34,9 @@ jobs:
           path: dst/
       - run: gh release delete nightly --cleanup-tag -y || true
       - run: |
-          gh release create nightly --prerelease \
+          gh release create nightly \
                 --title "Nightly build" \
                 --target main \
                 dst/**
+          gh release edit nightly --draft=false
     
