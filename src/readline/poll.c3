@@ -24,7 +24,7 @@ fn Poll new()
 	};
 }
 
-fn bool Poll.poll(&self)
+fn bool Poll.tick(&self)
 {
 	EpollEvent event;
 	return linux::epoll_wait(

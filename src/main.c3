@@ -6,21 +6,23 @@ import std::collections::list;
 import cyqra::lexer;
 import cyqra::parser;
 import cyqra::interpreter;
+import cyqra::readline::reader;
 
 fn void interactive() => @pool()
 {
     Interpreter interpreter = interpreter::new(tmem);
     Parser parser = parser::new(tmem, {.src_name = "repl"});
+    Reader reader = reader::new(tmem);
     while (true) {
         io::print("> ");
         // read
-        String line = io::treadline()!!;
+        // String line = io::treadline()!!;
+        reader.read_line();
+        // Lexer lexer = lexer::new(tmem, line);
+        // List{Token} tokens = lexer.analyze();
 
-        Lexer lexer = lexer::new(tmem, line);
-        List{Token} tokens = lexer.analyze();
-
-        parser.parse(tokens);     
-        interpreter.interpret(parser.ast);
+        // parser.parse(tokens);     
+        // interpreter.interpret(parser.ast);
    }
 }
 
