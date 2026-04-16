@@ -59,11 +59,11 @@ fn Event parse_event(char[] buf)
         }
         // ctrl keys
         case 0: return { .kind = CTRL, .ch[0] = ' ' };
-		case 0x1..0x8:
-		case 0xa..0xc:
-		case 0xe..0x1a:
-			return { .kind = CTRL, .ch[0] = c + '@' };
-		case 0x1c..0x1f: return { .kind = CTRL, .ch[0] = c - 0x1c + '4' };
+		// case 0x1..0x8:
+		// case 0xa..0xc:
+		// case 0xe..0x1a:
+			// return { .kind = CTRL, .ch[0] = c + '@' };
+		// case 0x1c..0x1f: return { .kind = CTRL, .ch[0] = c - 0x1c + '4' };
 		// utf8 chars
         default: {
 			Event ev = { .kind = CHAR, .len = buf.len };
@@ -88,8 +88,6 @@ fn Event parse_csi(char[] buf)
     }
 }
 
-
-
 struct Reader
 {
 	Terminal term;
@@ -102,6 +100,11 @@ fn Reader new(Allocator allocator) @public => {
 	.poll = poll::new(),
 	.line_buffer = line_buffer::new(allocator)
 };
+
+fn void Reader.free(&self)
+{
+	self.line_buffer.free();
+}
 
 fn void Reader.render(&self) {
     String ps1 = "> ";
@@ -121,14 +124,17 @@ fn void Reader.render(&self) {
     io::stdout().flush()!!;
 }
 
-fn void Reader.handle_input(&self)
+<*
+	@return "true on submit"
+*>
+fn bool Reader.handle_input(&self)
 {
 	char[] escape = read_event(&self.buffer);
 	Event event = parse_event(escape);
-	self.consume_event(event);
+	return self.consume_event(event);
 }
 
-fn void Reader.consume_event(&self, Event event)
+fn bool Reader.consume_event(&self, Event event)
 {
 	switch (event.kind) {
 		case LEFT:
@@ -141,23 +147,30 @@ fn void Reader.consume_event(&self, Event event)
 			self.line_buffer.remove("left");
 		case DELETE:
 			self.line_buffer.remove("right");
+		case ENTER:
+			return true;	
+
 		default:
 			//insert
 			io::printn(event);
 	}
+	return false;
 }
 
-fn void Reader.read_line(&self)
+fn String Reader.read_line(&self)
 {
+	self.line_buffer.reset();
+
 	self.term.enable_raw();
 	defer self.term.disable_raw();
 	
 	self.render();
 	while (true) {
 		if (!self.poll.tick()) continue;
-		self.handle_input();
+		if (self.handle_input()) break;
 
 		//! TODO: partial rerender?
 		self.render();
 	}
+	return self.line_buffer.str();
 }

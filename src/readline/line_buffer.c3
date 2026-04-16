@@ -12,6 +12,18 @@ fn LineBuffer new(Allocator allocator) => {
 	.prompt = (DString){}.init(allocator)
 };
 
+fn void LineBuffer.free(&self)
+{
+	self.prompt.free();	
+}
+
+fn String LineBuffer.str(&self) => self.prompt.str_view();
+fn void LineBuffer.reset(&self)
+{
+	self.prompt.clear();
+	self.internal_cursor = 0;
+	self.visual_cursor = 0;
+}
 
 macro sz LineBuffer.closest_codepoint(&self, $direction)
 {
