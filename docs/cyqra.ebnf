@@ -5,7 +5,6 @@ upper-case = 'A' | 'B' | 'C' | ... | 'X' | 'Y' | 'Z';
 letter = upper-case | lower-case;
 number = digit , { digit };
 
-char = "'" , ? ascii-char ? , "'" ;
 text = '"' , { ? any-char ? } , '"';
 bool = "true" | "false";
 
@@ -15,14 +14,12 @@ string = '"' , { string_part } , '"';
 
 
 literal = number
-	 	  | char
 		  | string
 		  | bool
 		  ; 
 
 (*---- Syntax ----*)
-comment = "//" , ? any-char ? , "\n"
-		  | "/*" , ? any-char ? , "*/";
+comment = "#" , ? any-char ? , "\n";
 
 identifier = letter , { letter | digit | "_" };
 
@@ -37,27 +34,33 @@ binding = ("let" | "mut" | "env" | "alias") , identifier , "=" , (expression | b
 *)
 raw_token = ? any-chars except the above tokens ?
 
-shell_cmd = identifier;
+expression = expr_head , { expr_tail };
+sub_expression = "(" , expression , ")";
+expression_list = expression , { "," , expression };
+
+shell_cmd = identifier; (* when identifier is not present in the scope *)
 shell_arg = ?? anything between spaces ?? ;
 shell_call = shell_cmd , { " " , shell_arg };
 
-sub_expression = "(" , expression , ")";
-expression = expr_head , { expr_tail };
+fn_call = "(" , [ expression_list ] , ")";
+
+array = "[" , [ expression_list ] , "]";
+record = ;
+indexing = "[" , expression , "]";
 
 expr_head = literal
 		  | identifier (* when identifier is a variable in the scope *)
 		  | shell_call
 		  | sub_expression
+		  | array
 		  | prefix_op , expression
 		  ;
 
 expr_tail = postfix_op
 			| infix_op , expression
-			| "(" , [ argument_list ] , ")"
-			| "[" , expression , "]"
+			| fn_call
+			| indexing
 			;
-argument = expression;
-argument_list = expression , { "," , expression };
 
 prefix_op  = "+" | "-" | "++" | "--" ;
 postfix_op = "++" | "--" ;
