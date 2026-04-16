@@ -15,6 +15,7 @@ fn void Terminal.enable_raw(&self)
     raw.c_iflag.icrnl  = false;
 	raw.c_iflag.igncr  = false;
 	raw.c_iflag.brkint = false;
+	raw.c_iflag.ixon   = false;
 
 	raw.c_lflag.echo   = false;
 	raw.c_lflag.icanon = false;

@@ -50,9 +50,11 @@ fn void Interpreter.interpret(&self, Ast ast)
 		// }
 		last = self.eval(expr)!!;
 	}
-	String s_val = last.to_string(self.allocator);
-	io::printn(s_val);
-	s_val.free(self.allocator);	
+	if (last.kind != UNIT) {
+		String s_val = last.to_string(self.allocator);
+		io::printn(s_val);
+		s_val.free(self.allocator);
+	}
 }
 
 fn Value? Interpreter.eval(&self, Expr* expr)

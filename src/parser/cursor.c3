@@ -10,8 +10,8 @@ struct Cursor
 {
 	List{ Token } tokens;
 
-	uint start;
-	uint current;
+	usz start;
+	usz current;
 }
 
 fn void Cursor.reset(&self)
@@ -60,6 +60,6 @@ fn void Cursor.skip_spaces(&self, bool skip_lf = true)
 fn String Cursor.expr_span(&self)
 {
 	String left = self.tokens[self.start].slice;
-	String right = self.tokens[self.current - (usz)1].slice;
+	String right = self.tokens[self.current - 1].slice;
 	return (String)left.ptr[..(right.ptr - left.ptr) + right.len];	
 }

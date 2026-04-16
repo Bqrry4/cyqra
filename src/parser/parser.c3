@@ -41,9 +41,9 @@ fn void Parser.fill_diagnostic(&self, String msg)
 {
 	self.diagnostic.msg = msg;
 	self.diagnostic.span = self.cursor.expr_span();
-	Token cause = self.cursor.peek(skip_wp: false)!!;
-	self.diagnostic.line = cause.line;
-	self.diagnostic.column = cause.column;
+	// Token cause = self.cursor.peek(skip_wp: false)!!;
+	// self.diagnostic.line = cause.line;
+	// self.diagnostic.column = cause.column;
 }
 <*
 	Tokens -> Ast.
@@ -259,7 +259,7 @@ fn Expr*? Parser.expr_head(&self)
 				});
 			}
 			// ast::INVALID_EXPRESSION~!!;
-			io::printn(tk);
+			// io::printn(tk);
 			self.fill_diagnostic("unexpected token");
 			return ast::INVALID_EXPRESSION~;
 	}
