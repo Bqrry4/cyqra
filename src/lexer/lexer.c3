@@ -47,6 +47,12 @@ fn Lexer new(Allocator allocator) @public
      };
 }
 
+fn void Lexer.free(&self)
+{
+     self.output.free();
+     self.ctxs.free();
+}
+
 fn void Lexer.set_source(&self, String source)
 {
      self.source = source;
