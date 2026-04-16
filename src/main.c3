@@ -10,15 +10,15 @@ import cyqra::readline::reader;
 
 fn void interactive() => @pool()
 {
-    Interpreter interpreter = interpreter::new(tmem);
+    Lexer lexer = lexer::new(tmem);
     Parser parser = parser::new(tmem, {.src_name = "repl"});
+    Interpreter interpreter = interpreter::new(tmem);
     Reader reader = reader::new(tmem);
     while (true) {
         String line = reader.read_line();
         //! TODO: implement proper render in the ^reader
         io::printf("\r\n");
-        Lexer lexer = lexer::new(tmem, line);
-        List{Token} tokens = lexer.analyze();
+        List{Token} tokens = lexer.analyze(line);
 
         parser.parse(tokens);     
         interpreter.interpret(parser.ast);
@@ -28,8 +28,8 @@ fn void interactive() => @pool()
 fn void from_file(String file_name, String content)
 {
     
-    Lexer lexer = lexer::new(tmem, content);
-    List{Token} tokens = lexer.analyze();
+    Lexer lexer = lexer::new(tmem);
+    List{Token} tokens = lexer.analyze(content);
 
     Parser parser = parser::new(tmem, {.src_name = file_name});
     parser.parse(tokens);

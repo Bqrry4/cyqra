@@ -30,7 +30,7 @@ struct Lexer
      List{ LexContext } ctxs;
 }
 
-fn Lexer new(Allocator allocator, String source) @public
+fn Lexer new(Allocator allocator) @public
 {
      List{ Token } tokens;
      tokens.init(allocator);
@@ -42,14 +42,18 @@ fn Lexer new(Allocator allocator, String source) @public
      
      return {
           .allocator = allocator,
-          .source = source,
           .output = tokens,
-          .cursor = {
-               .start = source,
-               .current = source,
-               .end = (char*)source + source.len
-          },
           .ctxs = ctxs
+     };
+}
+
+fn void Lexer.set_source(&self, String source)
+{
+     self.source = source;
+     self.cursor = {
+          .start = source,
+          .current = source,
+          .end = (char*)source + source.len
      };
 }
 
@@ -61,8 +65,9 @@ fn void List{ LexContext }.switch_back(&self) => self.pop()!!;
 
 fn LexContext* Lexer.ctx(&self) => &self.ctxs[self.ctxs.len() - 1];
 
-fn List{ Token } Lexer.analyze(&self)
+fn List{ Token } Lexer.analyze(&self, String source)
 {
+     self.set_source(source);
      self.output.clear();
      
      while (!self.cursor.eof()) {
