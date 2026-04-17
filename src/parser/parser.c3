@@ -534,7 +534,7 @@ fn Expr*? Parser.parse_function(&self)
 	defer fn_nms.free(self.allocator);
 
 	foreach (param: params) {
-		fn_nms.add(param);
+		fn_nms.add(param.copy(self.allocator));
 	}
 
 	Expr* body = self.parse_block(nullable::value(fn_nms))!;	
