@@ -34,7 +34,9 @@ fn Parser new(Allocator allocator, Diagnostic diagnostic)
 
 fn void Parser.free(&self)
 {
-	//!TODO
+	self.nms.free(self.allocator);
+	alloc::free(self.allocator, self.nms);
+	//! TODO: the rest
 }
 
 fn void Parser.fill_diagnostic(&self, String msg)
@@ -459,7 +461,7 @@ fn Expr*? Parser.parse_block(&self, Nullable{ Namespace* } nms = nullable::NULL)
 	if(nms.is_null()) {
 		local_nms = namespace::new_ref(self.allocator, nullable::value(self.nms));
 		defer {
-			local_nms.free();
+			local_nms.free(self.allocator);
 			alloc::free(self.allocator, local_nms);
 		}
 	}
@@ -529,7 +531,7 @@ fn Expr*? Parser.parse_function(&self)
 	}
 	
 	Namespace* fn_nms = namespace::new_ref(self.allocator, nullable::value(self.nms));
-	defer fn_nms.free();
+	defer fn_nms.free(self.allocator);
 
 	foreach (param: params) {
 		fn_nms.add(param);

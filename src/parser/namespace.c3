@@ -9,22 +9,32 @@ struct Namespace
 }
 
 <* The returned ref must be freed explicitly *>
-fn Namespace* new_ref(Allocator allocator, Nullable{ Namespace* } parent = nullable::NULL)
+fn Namespace* new_ref(Allocator alloc, Nullable{ Namespace* } parent = nullable::NULL)
 {
 	HashSet{ String } set;
-	set.init(allocator);
+	set.init(alloc);
 
-	return alloc::new(allocator, Namespace, {
+	return alloc::new(alloc, Namespace, {
 		.parent = parent,
 		.set = set
 	});
 }
 
-fn void Namespace.free(&self)
+
+<*
+	Frees the instance AND the added values.
+*>
+fn void Namespace.free(&self, Allocator alloc)
 {
+	self.set.@each(;value) {
+		value.free(alloc);
+	};
 	self.set.free();
 }
 
+<*
+	!Gets ownership over the added value.
+*>
 fn void Namespace.add(&self, String value) => self.set.add(value);
 fn bool Namespace.has(&self, String value)
 {
