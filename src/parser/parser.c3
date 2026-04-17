@@ -383,7 +383,9 @@ fn Expr*? Parser.parse_binding(&self)
 	}
 
 	Expr* value = self.parse_expression()!;
-	self.nms.add(identifier.slice);
+	//! Must create a copy to ensure sequential runs,
+	// as the source buffer might be discarded
+	self.nms.add(identifier.slice.copy(self.allocator));
 	
 	return mem::new(Expr, {
 		.kind = ExprKind.BINDING,
