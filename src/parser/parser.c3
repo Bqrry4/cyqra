@@ -138,10 +138,24 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 						return ast::INVALID_EXPRESSION~;			
 					}
 				}
-				case INTERP_IDENT: part = {
-					.kind = INTERP,
-					.interp = self.parse_expression()!
-				};
+				case INTERP_IDENT: {
+					tk = self.cursor.advance()!;
+					if (tk.kind != IDENTIFIER) {
+						self.fill_diagnostic("expected identifier");
+						return ast::INVALID_EXPRESSION~;	
+					}
+					Expr* ident = mem::new(Expr, {
+						.kind = ExprKind.PRIMARY,
+						.primary = {
+							.token = tk
+						}
+					});
+
+					part = {
+						.kind = INTERP,
+						.interp = ident
+					};
+				}
 				default: part = {
 					.kind = TEXT,
 					.text = tk.slice 	
