@@ -53,6 +53,7 @@ enum TokenKind : int @public
 struct Token
 {
      TokenKind kind;
+     <* Represents a slice over the input source *>
      String slice;
 
      uint line;

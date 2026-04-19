@@ -53,6 +53,21 @@ fn void Lexer.free(&self)
      self.ctxs.free();
 }
 
+fn void Lexer.reset(&self)
+{
+     self.output.clear();
+     //@ Lexer could exit on non default mode.
+     // As example on errors inside INTERPOLATION.
+     // Or if in repl mode with valid expressions,
+     // that don't have further input to return. 
+     // such as `echo $test`
+     self.ctxs.clear();
+     self.ctxs.push({
+          .mode = DEFAULT
+     });
+
+}
+
 fn void Lexer.set_source(&self, String source)
 {
      self.source = source;
@@ -73,9 +88,9 @@ fn LexContext* Lexer.ctx(&self) => &self.ctxs[self.ctxs.len() - 1];
 
 fn List{ Token } Lexer.analyze(&self, String source)
 {
+     self.reset();
      self.set_source(source);
-     self.output.clear();
-     
+          
      while (!self.cursor.eof()) {
          if (catch self.next_token()) break;
      }
@@ -206,7 +221,8 @@ fn void? Lexer.lex_text(&self, char c)
                     self.lex_identifier();
                }                 
           }
-          case ' ': {
+          case ' ':
+          case '\n': {
                if (self.ctx().mode == RAW) {
                     self.ctxs.switch_back();
                     self.lex_code(c)!;
