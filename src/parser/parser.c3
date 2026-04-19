@@ -43,9 +43,11 @@ fn void Parser.fill_diagnostic(&self, String msg)
 {
 	self.diagnostic.msg = msg;
 	self.diagnostic.span = self.cursor.expr_span();
-	// Token cause = self.cursor.peek(skip_wp: false)!!;
-	// self.diagnostic.line = cause.line;
-	// self.diagnostic.column = cause.column;
+	Token cause = self.cursor.peek(skip_wp: false);
+	self.diagnostic.line = cause.line;
+	self.diagnostic.column = cause.column;
+	self.diagnostic.length = cause.slice.len;
+	io::printn(cause);
 }
 <*
 	Tokens -> Ast.
@@ -96,6 +98,7 @@ fn bool is_shell_call_terminator(TokenKind kind)
 	switch (kind) {
 		case SPACE: case NEW_LINE:     case SEMICOLON:
 		case PIPE:  case CLOSED_BRACE: case CLOSED_PHARANTESIS:
+		case EOF:
 			return true;
 		default: return false;
 	};
@@ -117,15 +120,14 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 			continue;
 		}
 
-		Token tk;
-		if(catch @try(tk, self.cursor.peek(skip_lf: false))) break;
+		Token tk = self.cursor.peek(skip_lf: false);
 		if (is_shell_call_terminator(tk.kind)) break;
 
 		List{ StringPart } parts;
 		parts.init(mem);
 		// consume tokens greedily until terminator 
 		do {
-			self.cursor.advance()!;
+			self.cursor.advance();
 			StringPart part;
 			switch (tk.kind) {
 				case INTERP_START: {
@@ -139,7 +141,7 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 					}
 				}
 				case INTERP_IDENT: {
-					tk = self.cursor.advance()!;
+					tk = self.cursor.advance();
 					if (tk.kind != IDENTIFIER) {
 						self.fill_diagnostic("expected identifier");
 						return ast::INVALID_EXPRESSION~;	
@@ -164,7 +166,7 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 			
 			parts.push(part);
 			
-			if(catch @try(tk, self.cursor.peek(skip_wp: false))) break;
+			tk = self.cursor.peek(skip_wp: false);
 		} while (!is_shell_call_terminator(tk.kind));
 
 		args.push(mem::new(Expr, {
@@ -186,7 +188,7 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 
 fn Expr*? Parser.expr_head(&self)
 {
-	Token tk = self.cursor.advance()!;
+	Token tk = self.cursor.advance();
 
 	switch(tk.kind) {
 		//& literal
@@ -204,7 +206,7 @@ fn Expr*? Parser.expr_head(&self)
 
 			while (!self.cursor.follows(D_QUOTES)) {
 				StringPart part;
-				tk = self.cursor.advance()!;
+				tk = self.cursor.advance();
 				
 				switch (tk.kind) {
 					case STRING_PART:
@@ -275,7 +277,7 @@ fn Expr*? Parser.expr_head(&self)
 				});
 			}
 			// ast::INVALID_EXPRESSION~!!;
-			// io::printn(tk);
+			io::printn(tk);
 			self.fill_diagnostic("unexpected token");
 			return ast::INVALID_EXPRESSION~;
 	}
@@ -285,10 +287,12 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 {
 	Expr* expr = self.expr_head()!;
 	//& { expr_tail }
-	while (try op = self.cursor.peek(skip_lf: false)) {
+	while (true) {
+		Token op = self.cursor.peek(skip_lf: false);
+
 		//& "(" , [ argument_list ] , ")"
 		if (op.kind == TokenKind.OPEN_PHARANTESIS) {
-			self.cursor.advance()!;
+			self.cursor.advance();
 
 			List{ Expr* } args;
 			args.init(mem);
@@ -316,7 +320,7 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 		}
 		//& "[" , expression , "]"
 		if (op.kind == TokenKind.OPEN_BRACKET) {
-			self.cursor.advance()!;
+			self.cursor.advance();
 			
 			Expr* index = self.parse_expression()!;
 			if(!self.cursor.follows(CLOSED_BRACKET)) {
@@ -335,7 +339,7 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 		}
 		//& postfix_op
 		if (try prec = self.ops_def.check_postfix_op(op.kind)) {
-			self.cursor.advance()!;
+			self.cursor.advance();
 			
 			expr = mem::new(Expr, {
 				.kind = ExprKind.POSTFIX,
@@ -357,7 +361,7 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 		
 		//& infix_op , expression
 		if (try prec = self.ops_def.check_infix_op(op.kind, base_prec)) {
-			self.cursor.advance()!;
+			self.cursor.advance();
 			
 			Expr* rhs = self.parse_expression(prec)!;
 			expr = mem::new(Expr, {
@@ -378,16 +382,16 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 
 fn Expr*? Parser.parse_binding(&self)
 {
-	TokenKind binding_type = self.cursor.peek()!.kind;
+	TokenKind binding_type = self.cursor.peek().kind;
 	switch (binding_type) {
 		case LET..ENV:
-			self.cursor.advance()!;
+			self.cursor.advance();
 		default:
 			// io::printn("No binding keyword");
 			return ast::INVALID_EXPRESSION~; 
 	}
 
-	Token identifier = self.cursor.advance()!;
+	Token identifier = self.cursor.advance();
 	if (identifier.kind != TokenKind.IDENTIFIER) {
 		self.fill_diagnostic("expected identifier after binding keyword");
 		return ast::INVALID_EXPRESSION~;
@@ -504,19 +508,19 @@ fn Expr*? Parser.parse_block(&self, Nullable{ Namespace* } nms = nullable::NULL)
 fn void? Parser.parse_parameters(&self, List{ String }* params)
 {
 	do {
-		Token tk = self.cursor.peek()!;
+		Token tk = self.cursor.peek();
 		if (tk.kind != TokenKind.IDENTIFIER) {
 			self.fill_diagnostic("expected identifier");
 			return ast::INVALID_EXPRESSION~;
 		}
-		self.cursor.advance()!;
+		self.cursor.advance();
 		params.push(tk.slice);
 	} while (self.cursor.follows(TokenKind.COMMA));
 }
 
 fn Expr*? Parser.parse_function(&self)
 {
-	Token identifier = self.cursor.advance()!;
+	Token identifier = self.cursor.advance();
 	if (identifier.kind != TokenKind.IDENTIFIER) {
 		self.fill_diagnostic("function name not provided");
 		return ast::INVALID_EXPRESSION~;
