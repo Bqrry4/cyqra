@@ -382,35 +382,34 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 
 fn Expr*? Parser.parse_binding(&self)
 {
-	TokenKind binding_type = self.cursor.peek().kind;
-	switch (binding_type) {
-		case LET..ENV:
-			self.cursor.advance();
-		default:
-			// io::printn("No binding keyword");
-			return ast::INVALID_EXPRESSION~; 
-	}
+	//!Support only let for now
+	// add other types as the interpreter matures
+
+	// TokenKind binding_type = self.cursor.peek().kind;
+	// switch (binding_type) {
+	// 	case LET..ENV:
+	// 		self.cursor.advance();
+	// 	default:
+	// 		return ast::INVALID_EXPRESSION~; 
+	// }
 
 	Token identifier = self.cursor.advance();
 	if (identifier.kind != TokenKind.IDENTIFIER) {
 		self.fill_diagnostic("expected identifier after binding keyword");
 		return ast::INVALID_EXPRESSION~;
 	}
-	
 	if (!self.cursor.follows(TokenKind.EQ)) {
-		self.fill_diagnostic("missing '='");
+		self.fill_diagnostic("expected =");
 		return ast::INVALID_EXPRESSION~;
 	}
-
+	
 	Expr* value = self.parse_expression()!;
-	//! Must create a copy to ensure sequential runs,
-	// as the source buffer might be discarded
 	self.nms.add(identifier.slice.copy(self.allocator));
 	
 	return mem::new(Expr, {
 		.kind = ExprKind.BINDING,
 		.binding = {
-			.type = binding_type,
+			.type = LET,
 			.identifier = identifier,
 			.value = value 
 		}
@@ -443,14 +442,11 @@ fn Expr*? Parser.parse_statement(&self)
 {
 	switch {
 		case self.cursor.follows(RETURN): return self.parse_return();
+		case self.cursor.follows(LET): return self.parse_binding();
 		default: {
-			if (try binding = self.parse_binding()) {
-				return binding;
-			}	
-
-			if (try assignment = self.parse_assignment()) {
-				return assignment;
-			}
+			// if (try assignment = self.parse_assignment()) {
+				// return assignment;
+			// }
 
 			return self.parse_expression();
 		}
