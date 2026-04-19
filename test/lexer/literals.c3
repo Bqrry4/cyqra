@@ -2,12 +2,6 @@ module cyqra::lexer @test;
 import std::collections::list;
 import std::io;
 
-macro lexer_analyze(String content)
-{
-	Lexer lex = lexer::new(tmem);
-	return lex.analyze(content);
-}
-
 fn void lex_int() => @pool()
 {
 	List{ Token } tokens = lexer_analyze("4");
