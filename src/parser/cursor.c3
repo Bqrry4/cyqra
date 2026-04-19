@@ -69,5 +69,5 @@ fn String Cursor.expr_span(&self)
 {
 	String left = self.tokens[self.start].slice;
 	String right = self.tokens[self.current - 1].slice;
-	return (String)left.ptr[..(right.ptr - left.ptr) + right.len];	
+	return (String)left.ptr[:(right.ptr - left.ptr) + right.len];	
 }
