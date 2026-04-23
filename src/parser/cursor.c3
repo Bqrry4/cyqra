@@ -7,23 +7,30 @@ import cyqra::lexer::token;
 struct Cursor
 {
 	List{ Token } tokens;
-
-	usz start;
 	usz current;
 }
 
 fn void Cursor.reset(&self)
 {
-	self.start = 0;
 	self.current = 0;
 }
 
+<*
+	@return `Sentinel token, defined as:
+		kind: EOF
+		column: last.column + 1
+		slice: empty slice positioned at the end of the source
+			ptr: &source[len - 1]
+			length: 0
+	`
+*>
 fn Token Cursor.sentinel_token(&self)
 {
 	Token tk = self.tokens.last()!!;
 	tk.kind = EOF;
-	tk.column++;
-	tk.slice = tk.slice[:0];
+	tk.span.column++;
+	String slice = tk.span.slice;
+	tk.span.slice = (String)(slice.ptr + slice.len)[:0];
 	return tk;
 }
 
@@ -63,11 +70,4 @@ fn void Cursor.skip_spaces(&self, bool skip_lf = true)
 	) {
 		self.current++;
 	};
-}
-
-fn String Cursor.expr_span(&self)
-{
-	String left = self.tokens[self.start].slice;
-	String right = self.tokens[self.current - 1].slice;
-	return (String)left.ptr[:(right.ptr - left.ptr) + right.len];	
 }

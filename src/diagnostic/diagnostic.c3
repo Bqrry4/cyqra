@@ -44,8 +44,6 @@ const String LINES  = "───────────────────
 fn sz? Diagnostic.to_format(&self, Formatter* formatter) @dynamic
 {
 	Span chunk = span::backtrack(self.source, self.cause, LINES_SHOWN);
-	io::printn(chunk.slice);
-	io::printn(self.cause);
 	usz n = 0;
 	n += formatter.printf("   ╭─[\e[0m%s:%d:%d\e[0m]\n", self.src_name, self.cause.row, self.cause.column)!;
 	n += formatter.printf(" \e[2m%d │ \e[35m%s\e[0m\n", self.cause.row, chunk.slice)!;

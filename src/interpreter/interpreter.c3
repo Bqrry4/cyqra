@@ -62,7 +62,7 @@ fn Value? Interpreter.eval(&self, Expr* expr)
 	switch (expr.kind) {
 		case PRIMARY:
 			return self.eval_primary(&expr.primary);			
-		case STRING:
+		case STRINGLIT:
 			return self.eval_string(&expr.string);
 		// case PREFIX:
 		// 	expr.prefix.eval();
@@ -93,16 +93,16 @@ fn Value? Interpreter.eval_primary(&self, Primary* expr)
 	switch (expr.token.kind) {
 		case INTEGER: return {
 			.kind = INT,
-			._int = expr.token.slice.to_long()!
+			._int = expr.token.span.slice.to_long()!
 		};
 		case FLOAT: return {
 			.kind = FLOAT,
-			._float = expr.token.slice.to_double()!
+			._float = expr.token.span.slice.to_double()!
 		};
 		case IDENTIFIER:
-			Value? val = self.scope.get(expr.token.slice);
+			Value? val = self.scope.get(expr.token.span.slice);
 			if (catch val) {
-				self.identifier = expr.token.slice;
+				self.identifier = expr.token.span.slice;
 				return IDENTIFIER_NOT_FOUND~;
 			}
 			return val;
@@ -110,7 +110,7 @@ fn Value? Interpreter.eval_primary(&self, Primary* expr)
 	}
 }
 
-fn Value? Interpreter.eval_string(&self, StringLiteral* expr)
+fn Value? Interpreter.eval_string(&self, StringLit* expr)
 {
 	DString dstring = (DString){}.init(self.allocator);
 
@@ -203,7 +203,7 @@ fn Value? Interpreter.eval_binding(&self, Binding* expr)
 	switch (expr.type) {
 		case LET:
 		case MUT:
-			self.scope.set(expr.identifier.slice, value);
+			self.scope.set(expr.identifier.span.slice, value);
 		//! TODO env
 		case ENV:	// os::set_var();
 		default: unreachable("Not a binding keyword");			
@@ -237,7 +237,7 @@ fn Value? Interpreter.eval_block(&self, Block* expr, Nullable{ Scope* } scope = 
 
 fn Value? Interpreter.eval_fn(&self, Function* expr)
 {
-	self.scope.set(expr.identifier.slice, {
+	self.scope.set(expr.identifier.span.slice, {
 		.kind = FUNCTION,
 		._fn = {
 			.params = expr.params,

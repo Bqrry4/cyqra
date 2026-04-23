@@ -1,9 +1,5 @@
 module cyqra::parser::ast;
-import cyqra::lexer;
-import std::io;
 import std::collections::list;
-
-import utils::nullable;
 
 faultdef INVALID_EXPRESSION;
 
@@ -33,10 +29,21 @@ fn void Ast.free(&self)
 	self.expressions.free();
 }
 
+module cyqra::parser::ast::expr;
+
+import cyqra::lexer;
+import cyqra::lexer::span;
+import utils::nullable;
+
+import std::io;
+import std::collections::list;
+
+
+
 enum ExprKind
 {
 	PRIMARY,
-	STRING,
+	STRINGLIT,
 	PREFIX,
 	POSTFIX,
 	INFIX,
@@ -113,17 +120,16 @@ struct StringPart
     }
 }
 
-struct StringLiteral
+struct StringLit
 {
 	List{ StringPart } parts;
 }
 
 struct Expr
 {
-	ExprKind kind;
-	union {
+	struct {
 		Primary primary;
-		StringLiteral string; 
+		StringLit string; 
 		Prefix prefix;
 		Postfix postfix;
 		Infix infix;
@@ -134,77 +140,99 @@ struct Expr
 		Function fun;
 		Return ret;
 	}
+	Span span;
+	ExprKind kind;
 }
 
-fn void Expr.print(&self)
+macro @new($Type, Span span, #body)
 {
-	io::print(self.kind);
-	io::print(" (");
-	switch(self.kind)
-	{
-		case PRIMARY:
-			io::print(self.primary.token);
-			break;
-		case PREFIX:
-			io::print(self.prefix.op);
-			io::print(" (");
-			self.prefix.rhs.print();
-			io::print(") ");
-			break;
-		case POSTFIX:
-			io::print(" (");
-			self.postfix.lhs.print();
-			io::print(") ");
-			io::print(self.postfix.op);
-			break;
-		case INFIX:
-			io::print(" (");
-			self.infix.lhs.print();
-			io::print(") ");
-			io::print(self.infix.op);
-			io::print(" (");
-			self.infix.rhs.print();
-			io::print(") ");
-			break;
-		case CALL:
-			self.call.callee.print();
-			io::print(" ARGS: ");
-			foreach(arg : self.call.args) {
-				arg.print();
-			}
-		case INDEX:
-			self.index.object.print();
-			self.index.index.print();
-		case BINDING:
-			io::print(self.binding.type);
-			io::print(self.binding.identifier);
-			self.binding.value.print();
-			break;
-		case BLOCK:
-			foreach(stmt : self.block.stmts)
-			{
-				stmt.print();
-			}
-		case FUNCTION:
-			io::print(self.fun.identifier);
-			io::print("PARAMS ");
-			foreach(param : self.fun.params)
-			{
-				io::print(param);
-			}
-			self.fun.body.print();
-			break;
-		case STRING:
-			foreach(part : self.string.parts)
-			{
-				if(part.kind == TEXT) {
-					io::print(part.text);
-				}
-				else {
-					part.interp.print();
-				}
-			}
-		default:
-	}
-	io::print(") ");
+	Expr expr = {
+		.span = span,
+	};
+
+	var $field = "";
+	$foreach $member : Expr::members[0].members:
+ 		$if $member.type == $Type:	
+			$field = $member.name;
+		$endif
+	$endforeach
+
+	var $init = @sprintf("expr.kind = %s;", @str_upper($Type::name));
+	$init +++= @sprintf("expr.%s = #body;", $field);
+	$expand($init);
+	return mem::new(Expr, expr);
 }
+
+// fn void Expr.print(&self)
+// {
+// 	io::print(self.kind);
+// 	io::print(" (");
+// 	switch(self.kind)
+// 	{
+// 		case PRIMARY:
+// 			io::print(self.primary.token);
+// 			break;
+// 		case PREFIX:
+// 			io::print(self.prefix.op);
+// 			io::print(" (");
+// 			self.prefix.rhs.print();
+// 			io::print(") ");
+// 			break;
+// 		case POSTFIX:
+// 			io::print(" (");
+// 			self.postfix.lhs.print();
+// 			io::print(") ");
+// 			io::print(self.postfix.op);
+// 			break;
+// 		case INFIX:
+// 			io::print(" (");
+// 			self.infix.lhs.print();
+// 			io::print(") ");
+// 			io::print(self.infix.op);
+// 			io::print(" (");
+// 			self.infix.rhs.print();
+// 			io::print(") ");
+// 			break;
+// 		case CALL:
+// 			self.call.callee.print();
+// 			io::print(" ARGS: ");
+// 			foreach(arg : self.call.args) {
+// 				arg.print();
+// 			}
+// 		case INDEX:
+// 			self.index.object.print();
+// 			self.index.index.print();
+// 		case BINDING:
+// 			io::print(self.binding.type);
+// 			io::print(self.binding.identifier);
+// 			self.binding.value.print();
+// 			break;
+// 		case BLOCK:
+// 			foreach(stmt : self.block.stmts)
+// 			{
+// 				stmt.print();
+// 			}
+// 		case FUNCTION:
+// 			io::print(self.fun.identifier);
+// 			io::print("PARAMS ");
+// 			foreach(param : self.fun.params)
+// 			{
+// 				io::print(param);
+// 			}
+// 			self.fun.body.print();
+// 			break;
+// 		case STRING:
+// 			foreach(part : self.string.parts)
+// 			{
+// 				if(part.kind == TEXT) {
+// 					io::print(part.text);
+// 				}
+// 				else {
+// 					part.interp.print();
+// 				}
+// 			}
+// 		default:
+// 	}
+// 	io::print(") ");
+// }
+
