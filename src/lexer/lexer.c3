@@ -103,9 +103,11 @@ fn void Lexer.emit(&self, TokenKind kind)
      String lexeme = self.cursor.captured();
      self.output.push({
           .kind = kind,
-          .slice = lexeme,
-          .line = self.cursor.line,
-          .column = self.cursor.column
+          .span = {
+               .slice = lexeme,
+               .row = self.cursor.line,
+               .column = self.cursor.column
+          }
      });
 
      self.cursor.sync_start();

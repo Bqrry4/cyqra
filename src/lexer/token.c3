@@ -1,4 +1,5 @@
 module cyqra::lexer::token;
+import cyqra::lexer::span;
 
 enum TokenKind : int @public
 {
@@ -53,10 +54,6 @@ enum TokenKind : int @public
 struct Token
 {
      TokenKind kind;
-     <* Represents a slice over the input source *>
-     String slice;
-
-     uint line;
-     uint column;
+     Span span;
 }
 
