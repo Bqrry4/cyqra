@@ -44,11 +44,15 @@ fn void Parser.fill_diagnostic(&self, String msg)
 {
 	Token cause = self.cursor.peek(RAW);
 	self.diagnostic.cause = cause.span;
-	io::printn(cause.span);
+
 	self.diagnostic.error(cause.span,
 		msg
 	);
 }
+
+macro Span Parser.stmt_span(&self,
+	Span start
+) => start.extend(self.cursor.peek(RAW).span);
 
 <*
 	Tokens -> Ast.
@@ -157,7 +161,8 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 						return ast::INVALID_EXPRESSION~;	
 					}
 					Expr* ident = expr::@new(Primary,
-						start, { .token = tk }
+						{ .token = tk },
+						self.stmt_span(start)
 					);
 					part = {
 						.kind = INTERP,
@@ -176,13 +181,15 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 		} while (!is_shell_call_terminator(tk.kind));
 
 		args.push(expr::@new(StringLit,
-			start.extend(self.cursor.peek(RAW).span), { parts }
+			{ parts },
+			self.stmt_span(start)
 		));
 	}
 	
-	return expr::@new(Call, start, {
-		callee, args
-	});
+	return expr::@new(Call,
+		{ callee, args },
+		self.stmt_span(start)
+	);
 }
 
 fn Expr*? Parser.expr_head(&self)
@@ -195,7 +202,8 @@ fn Expr*? Parser.expr_head(&self)
 		case INTEGER:
 		case FLOAT:
 			return expr::@new(Primary,
-				start, { .token = tk }
+				{ .token = tk },
+				self.stmt_span(start)
 			);
 		case D_QUOTES: {
 			List{ StringPart } parts;
@@ -232,14 +240,16 @@ fn Expr*? Parser.expr_head(&self)
 				parts.push(part);
 			}
 			return expr::@new(StringLit,
-				start, { parts }
+				{ parts },
+				self.stmt_span(start)
 			);
 		}
 		//& identifier
 		//& shell_call 
 		case IDENTIFIER: {
 			Expr* primary = expr::@new(Primary,
-				start, { .token = tk }
+				{ .token = tk },
+				self.stmt_span(start)
 			);
 
 			if (self.nms.has(tk.span.slice) ||
@@ -261,7 +271,8 @@ fn Expr*? Parser.expr_head(&self)
 			if(try prec = self.ops_def.check_prefix_op(tk.kind)) {
 				Expr* rhs = self.parse_expression(prec)!;
 				return expr::@new(Prefix,
-					start, { .op = tk.kind, .rhs = rhs }
+					{ .op = tk.kind, .rhs = rhs },
+					self.stmt_span(start)
 				);
 			}
 			// ast::INVALID_EXPRESSION~!!;
@@ -300,8 +311,8 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
          	}
 			
 			expr = expr::@new(Call,
-				start,
-				{ expr, args }
+				{ expr, args },
+				self.stmt_span(start)
 			);
 			continue;
 		}
@@ -316,8 +327,8 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 			}
 
 			expr = expr::@new(Index,
-				start,
-				{ expr, index }
+				{ expr, index },
+				self.stmt_span(start)
 			);
 			continue;
 		}
@@ -326,8 +337,8 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 			self.cursor.advance();
 			
 			expr = expr::@new(Postfix,
-				start,
-				{ expr, op.kind }
+				{ expr, op.kind },
+				self.stmt_span(start)
 			);
 			continue;	
 		}
@@ -346,8 +357,8 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 			
 			Expr* rhs = self.parse_expression(prec)!;
 			expr = expr::@new(Infix,
-				start,
-				{ expr, op.kind, rhs }
+				{ expr, op.kind, rhs },
+				self.stmt_span(start)
 			);
 			continue;
 		}
@@ -391,8 +402,8 @@ fn Expr*? Parser.parse_binding(&self)
 	self.nms.add(identifier.span.slice.copy(self.allocator));
 	
 	return expr::@new(Binding,
-		start.extend(self.cursor.peek(RAW).span),
-		{ LET, identifier, value }
+		{ LET, identifier, value },
+		self.stmt_span(start)
 	);
 }
 
@@ -413,7 +424,8 @@ fn Expr*? Parser.parse_return(&self)
 	}
 
 	return expr::@new(Return,
-		start, { value }
+		{ value },
+		self.stmt_span(start)
 	);
 }
 
@@ -475,7 +487,8 @@ fn Expr*? Parser.parse_block(&self, Nullable{ Namespace* } nms = nullable::NULL)
 	}
 
 	return expr::@new(Block,
-		start, { stmts }
+		{ stmts },
+		self.stmt_span(start)
 	);
 }
 
@@ -533,7 +546,7 @@ fn Expr*? Parser.parse_function(&self)
 
 	Expr* body = self.parse_block(nullable::value(fn_nms))!;
 	return expr::@new(Function,
-		start,
-		{ identifier, params, body }
+		{ identifier, params, body },
+		self.stmt_span(start)
 	);
 }

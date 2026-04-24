@@ -144,7 +144,7 @@ struct Expr
 	ExprKind kind;
 }
 
-macro @new($Type, Span span, #body)
+macro @new($Type, #body, Span span)
 {
 	Expr expr = {
 		.span = span,
