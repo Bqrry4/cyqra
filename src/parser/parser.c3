@@ -44,7 +44,7 @@ fn void Parser.fill_diagnostic(&self, String msg)
 {
 	Token cause = self.cursor.peek(RAW);
 	self.diagnostic.cause = cause.span;
-
+	io::printn(cause.span);
 	self.diagnostic.error(cause.span,
 		msg
 	);
@@ -391,7 +391,7 @@ fn Expr*? Parser.parse_binding(&self)
 	self.nms.add(identifier.span.slice.copy(self.allocator));
 	
 	return expr::@new(Binding,
-		start,
+		start.extend(self.cursor.peek(RAW).span),
 		{ LET, identifier, value }
 	);
 }

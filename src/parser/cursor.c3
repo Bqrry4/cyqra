@@ -1,8 +1,8 @@
 module cyqra::parser::cursor;
 import std::collections::list;
-import std::io;
 
 import cyqra::lexer::token;
+import cyqra::lexer::span;
 
 enum CursorMode
 {
@@ -26,22 +26,25 @@ fn void Cursor.reset(&self)
 }
 
 <*
-	@return `Sentinel token, defined as:
+	@return ```
+		Sentinel token, defined as:
 		kind: EOF
-		column: last.column + 1
-		slice: empty slice positioned at the end of the source
-			ptr: &source[len - 1]
+		span.column: last.column + 1
+		span.slice: empty slice positioned at the end of the last token
+			ptr: &last.span.slice[len]
 			length: 0
-	`
+	```
 *>
 fn Token Cursor.sentinel_token(&self)
 {
-	Token tk = self.tokens.last()!!;
-	tk.kind = EOF;
-	tk.span.column++;
-	String slice = tk.span.slice;
-	tk.span.slice = (String)(slice.ptr + slice.len - 1)[:0];
-	return tk;
+	Token eot = self.tokens.last()!!;
+	eot.kind = EOF;
+	
+	Span* span = &eot.span;
+	span.column += span.slice.len;
+	span.slice = (String)(span.slice.ptr + span.slice.len)[:0];
+
+	return eot;
 }
 
 fn Token Cursor.advance(&self)

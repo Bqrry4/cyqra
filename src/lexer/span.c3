@@ -8,7 +8,7 @@ struct Span
 }
 
 fn Span Span.extend(&self, Span after) {
-	self.slice = self.slice[:(after.slice.ptr - self.slice.ptr + after.slice.len)];
+	self.slice = (String)(self.slice.ptr)[:(after.slice.ptr - self.slice.ptr + after.slice.len)];
 	return *self;
 }
 <*
