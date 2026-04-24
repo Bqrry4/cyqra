@@ -1,5 +1,5 @@
 module cyqra::lexer::span;
-import std::io;
+
 struct Span
 {
 	usz column;
@@ -7,8 +7,9 @@ struct Span
 	String slice;
 }
 
-fn void Span.extend(&self, Span after) {
+fn Span Span.extend(&self, Span after) {
 	self.slice = self.slice[:(after.slice.ptr - self.slice.ptr + after.slice.len)];
+	return *self;
 }
 <*
 	Backtrack n lines in the source
@@ -23,8 +24,7 @@ fn Span backtrack(String source, Span span, uint n)
 
 	int remaining = lines;
 	while (current > source.ptr) {
-			io::printn((char)*current);	--current;
-
+		--current;
 		if (*current != '\n') continue;
 		--remaining;
 		if (remaining <= 0) {

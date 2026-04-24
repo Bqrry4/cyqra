@@ -42,7 +42,7 @@ fn void Parser.free(&self)
 
 fn void Parser.fill_diagnostic(&self, String msg)
 {
-	Token cause = self.cursor.peek(skip_wp: false);
+	Token cause = self.cursor.peek(RAW);
 	self.diagnostic.cause = cause.span;
 
 	self.diagnostic.error(cause.span,
@@ -66,13 +66,13 @@ fn void Parser.parse(&self, List{ Token } tokens)
 			Expr* expr;
 			fault error;
 			switch {
-				case self.cursor.follows(FN): {
+				case self.cursor.match(FN): {
 					error = @catch(
 						@try(expr, self.parse_function())
 					);
 					if (!error) self.ast.expressions.push(expr);
 				}
-				case self.cursor.follows(OPEN_BRACE): {
+				case self.cursor.match(OPEN_BRACE): {
 					error = @catch(
 						@try(expr, self.parse_block())
 					);
@@ -114,28 +114,28 @@ fn bool is_shell_call_terminator(TokenKind kind)
 
 fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 {
-	Span start = self.cursor.peek().span;
+	Span start = self.cursor.peek(RAW).span;
 	
 	List{ Expr* } args;
 	args.init(mem);
 		
-	while (self.cursor.follows(TokenKind.SPACE, skip_wp: false)) {
-	
-		if (self.cursor.follows(TokenKind.OPEN_PHARANTESIS, skip_lf: false)) {
+	while (self.cursor.follows(SPACE)) {
+
+		Token tk = self.cursor.peek(KEEP_LF);
+		if (is_shell_call_terminator(tk.kind)) break;
+
+		if (self.cursor.follows(OPEN_PHARANTESIS)) {
 			args.push(self.parse_expression()!);
-			if (!self.cursor.follows(TokenKind.CLOSED_PHARANTESIS)) {
+			if (!self.cursor.follows(CLOSED_PHARANTESIS)) {
 				self.fill_diagnostic("expected ')'");
 				return ast::INVALID_EXPRESSION~;
 			}
 			continue;
 		}
 
-		Token tk = self.cursor.peek(skip_lf: false);
-		if (is_shell_call_terminator(tk.kind)) break;
-
 		List{ StringPart } parts;
 		parts.init(mem);
-		// consume tokens greedily until terminator 
+		//@ consume tokens greedily until terminator 
 		do {
 			self.cursor.advance();
 			StringPart part;
@@ -172,11 +172,11 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 			
 			parts.push(part);
 			
-			tk = self.cursor.peek(skip_wp: false);
+			tk = self.cursor.peek(RAW);
 		} while (!is_shell_call_terminator(tk.kind));
 
 		args.push(expr::@new(StringLit,
-			start, { parts }
+			start.extend(self.cursor.peek(RAW).span), { parts }
 		));
 	}
 	
@@ -187,7 +187,7 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 
 fn Expr*? Parser.expr_head(&self)
 {
-	Span start = self.cursor.peek().span;
+	Span start = self.cursor.peek(RAW).span;
 
 	Token tk = self.cursor.advance();
 	switch(tk.kind) {
@@ -243,7 +243,7 @@ fn Expr*? Parser.expr_head(&self)
 			);
 
 			if (self.nms.has(tk.span.slice) ||
-				self.cursor.follows(TokenKind.OPEN_PHARANTESIS, consume:false, skip_wp: false)
+				self.cursor.match(OPEN_PHARANTESIS, RAW)
 			) return primary;
 
 			return self.parse_shell_call(primary);
@@ -273,13 +273,15 @@ fn Expr*? Parser.expr_head(&self)
 
 fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 {
+	Span start = self.cursor.peek(RAW).span;
+
 	Expr* expr = self.expr_head()!;
 	//& { expr_tail }
 	while (true) {
-		Token op = self.cursor.peek(skip_lf: false);
+		Token op = self.cursor.peek(KEEP_LF);
 
 		//& "(" , [ argument_list ] , ")"
-		if (op.kind == TokenKind.OPEN_PHARANTESIS) {
+		if (op.kind == OPEN_PHARANTESIS) {
 			self.cursor.advance();
 
 			List{ Expr* } args;
@@ -289,7 +291,7 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
         	{
             	do {
                 	args.push(self.parse_expression()!);
-    	        } while (self.cursor.follows(TokenKind.COMMA));
+    	        } while (self.cursor.follows(COMMA));
 
 				if(!self.cursor.follows(CLOSED_PHARANTESIS)) {
 					self.fill_diagnostic("expected ')'");
@@ -297,17 +299,14 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 				}
          	}
 			
-			expr = mem::new(Expr, {
-				.kind = ExprKind.CALL,
-				.call = {
-					.callee = expr,
-					.args = args
-				}
-			});
+			expr = expr::@new(Call,
+				start,
+				{ expr, args }
+			);
 			continue;
 		}
 		//& "[" , expression , "]"
-		if (op.kind == TokenKind.OPEN_BRACKET) {
+		if (op.kind == OPEN_BRACKET) {
 			self.cursor.advance();
 			
 			Expr* index = self.parse_expression()!;
@@ -316,26 +315,20 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 				return ast::INVALID_EXPRESSION~;				
 			}
 
-			expr = mem::new(Expr, {
-            	.kind = ExprKind.INDEX,
-            	.index = {
-                	.object = expr,
-                	.index = index
-            	}
-        	});
+			expr = expr::@new(Index,
+				start,
+				{ expr, index }
+			);
 			continue;
 		}
 		//& postfix_op
 		if (try prec = self.ops_def.check_postfix_op(op.kind)) {
 			self.cursor.advance();
 			
-			expr = mem::new(Expr, {
-				.kind = ExprKind.POSTFIX,
-				.postfix = {
-					.lhs = expr,
-					.op = op.kind,
-				}
-			});
+			expr = expr::@new(Postfix,
+				start,
+				{ expr, op.kind }
+			);
 			continue;	
 		}
 
@@ -352,14 +345,10 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 			self.cursor.advance();
 			
 			Expr* rhs = self.parse_expression(prec)!;
-			expr = mem::new(Expr, {
-				.kind = ExprKind.INFIX,
-				.infix = {
-					.lhs = expr,
-					.op = op.kind,
-					.rhs = rhs
-				}
-			});
+			expr = expr::@new(Infix,
+				start,
+				{ expr, op.kind, rhs }
+			);
 			continue;
 		}
 		break;
@@ -370,7 +359,7 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 
 fn Expr*? Parser.parse_binding(&self)
 {
-
+	Span start = self.cursor.advance().span;
 	//!Support only let for now
 	// add other types as the interpreter matures
 
@@ -383,17 +372,17 @@ fn Expr*? Parser.parse_binding(&self)
 	// }
 
 	Token identifier = self.cursor.advance();
-	if (identifier.kind != TokenKind.IDENTIFIER) {
+	if (identifier.kind != IDENTIFIER) {
 		self.fill_diagnostic("expected identifier after binding keyword");
 		return ast::INVALID_EXPRESSION~;
 	}
 
-	if (!self.cursor.follows(TokenKind.EQ)) {
+	if (!self.cursor.follows(EQ)) {
 		self.fill_diagnostic("expected '='");
 		return ast::INVALID_EXPRESSION~;
 	}
 
-	if (is_line_terminator(self.cursor.peek(skip_wp: false).kind)) {
+	if (is_line_terminator(self.cursor.peek(RAW).kind)) {
 		self.fill_diagnostic("missing expression following '='");
 		return ast::INVALID_EXPRESSION~;
 	}
@@ -401,14 +390,10 @@ fn Expr*? Parser.parse_binding(&self)
 	Expr* value = self.parse_expression()!;
 	self.nms.add(identifier.span.slice.copy(self.allocator));
 	
-	return mem::new(Expr, {
-		.kind = ExprKind.BINDING,
-		.binding = {
-			.type = LET,
-			.identifier = identifier,
-			.value = value 
-		}
-	});
+	return expr::@new(Binding,
+		start,
+		{ LET, identifier, value }
+	);
 }
 
 //! TODO
@@ -420,7 +405,7 @@ fn Expr*? Parser.parse_assignment(&self)
 
 fn Expr*? Parser.parse_return(&self)
 {
-	Span start = self.cursor.peek().span;
+	Span start = self.cursor.peek(RAW).span;
 
 	Nullable{ Expr* } value = nullable::NULL;
 	if (try expr = self.parse_expression()) {
@@ -435,8 +420,8 @@ fn Expr*? Parser.parse_return(&self)
 fn Expr*? Parser.parse_statement(&self)
 {
 	switch {
-		case self.cursor.follows(RETURN): return self.parse_return();
-		case self.cursor.follows(LET): return self.parse_binding();
+		case self.cursor.match(RETURN): return self.parse_return();
+		case self.cursor.match(LET): return self.parse_binding();
 		default: {
 			// if (try assignment = self.parse_assignment()) {
 				// return assignment;
@@ -455,18 +440,17 @@ macro void? Parser.parse_statement_list(&self, List{ Expr* }* stmts, ...)
 {
 	do {
 	    $for var $i = 0; $i < $vacount; $i++:
-			if (self.cursor.follows($vaconst[$i], consume: false)) break;
+			if (self.cursor.match($vaconst[$i])) break;
     	$endfor
 		stmts.push(self.parse_statement()!);
-    } while (self.cursor.follows(TokenKind.NEW_LINE, skip_lf: false)
-		|| self.cursor.follows(TokenKind.SEMICOLON)
+    } while (self.cursor.follows(NEW_LINE)
+		|| self.cursor.follows(SEMICOLON)
 	);
 }
 
 fn Expr*? Parser.parse_block(&self, Nullable{ Namespace* } nms = nullable::NULL)
 {
-
-	Span start = self.cursor.peek().span;
+	Span start = self.cursor.advance().span;
 
 	Namespace* local_nms = nms.ptr;
 	if(nms.is_null()) {
@@ -484,8 +468,8 @@ fn Expr*? Parser.parse_block(&self, Nullable{ Namespace* } nms = nullable::NULL)
 	
 	List{ Expr* } stmts; stmts.init(mem);
 
-	self.parse_statement_list(&stmts, TokenKind.CLOSED_BRACE)!;
-	if (!self.cursor.follows(TokenKind.CLOSED_BRACE)) {
+	self.parse_statement_list(&stmts, CLOSED_BRACE)!;
+	if (!self.cursor.follows(CLOSED_BRACE)) {
 		self.fill_diagnostic("expected '}'");
 		return ast::INVALID_EXPRESSION~;
 	}
@@ -499,26 +483,26 @@ fn void? Parser.parse_parameters(&self, List{ String }* params)
 {
 	do {
 		Token tk = self.cursor.peek();
-		if (tk.kind != TokenKind.IDENTIFIER) {
+		if (tk.kind != IDENTIFIER) {
 			self.fill_diagnostic("expected identifier");
 			return ast::INVALID_EXPRESSION~;
 		}
 		self.cursor.advance();
 		params.push(tk.span.slice);
-	} while (self.cursor.follows(TokenKind.COMMA));
+	} while (self.cursor.follows(COMMA));
 }
 
 fn Expr*? Parser.parse_function(&self)
 {
-	Span start = self.cursor.peek().span;	
-
+	Span start = self.cursor.advance().span;
+	
 	Token identifier = self.cursor.advance();
-	if (identifier.kind != TokenKind.IDENTIFIER) {
+	if (identifier.kind != IDENTIFIER) {
 		self.fill_diagnostic("function name not provided");
 		return ast::INVALID_EXPRESSION~;
 	}
 
-	if (!self.cursor.follows(TokenKind.OPEN_PHARANTESIS)) {
+	if (!self.cursor.follows(OPEN_PHARANTESIS)) {
 		self.fill_diagnostic("missing '(' after function declaration");
 		return ast::INVALID_EXPRESSION~;
 	}
@@ -526,16 +510,16 @@ fn Expr*? Parser.parse_function(&self)
 	List{ String } params;
 	params.init(mem);
 	
-	if (!self.cursor.follows(TokenKind.CLOSED_PHARANTESIS)) {
+	if (!self.cursor.follows(CLOSED_PHARANTESIS)) {
 		self.parse_parameters(&params)!;
 
-		if (!self.cursor.follows(TokenKind.CLOSED_PHARANTESIS)) {
+		if (!self.cursor.follows(CLOSED_PHARANTESIS)) {
 			self.fill_diagnostic("expected ')'");
 			return ast::INVALID_EXPRESSION~;
 		}
 	}
 
-	if(!self.cursor.follows(OPEN_BRACE)) {
+	if(!self.cursor.match(OPEN_BRACE)) {
 		self.fill_diagnostic("expected block");
 		return ast::INVALID_EXPRESSION~;
 	}
@@ -549,6 +533,7 @@ fn Expr*? Parser.parse_function(&self)
 
 	Expr* body = self.parse_block(nullable::value(fn_nms))!;
 	return expr::@new(Function,
-		start, { identifier, params, body }
+		start,
+		{ identifier, params, body }
 	);
 }
