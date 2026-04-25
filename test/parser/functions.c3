@@ -47,7 +47,7 @@ fn void parse_shell_call()
 	`);
 	Call* call = unwrap_call(unwrap_nth(ast.expressions, 0));
 	assert_token(unwrap_primary(call.callee), "sub");
-	StringLiteral* str = unwrap_string(unwrap_nth(call.args, 0));
+	StringLit* str = unwrap_string(unwrap_nth(call.args, 0));
 	StringPart* part = unwrap_nth_str_part(str, 0, INTERP);
 	assert_token(unwrap_primary(part.interp), "b");
 	assert_token(unwrap_primary(unwrap_nth(call.args, 1)), "2");
