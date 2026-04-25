@@ -70,23 +70,25 @@ fn void Parser.parse(&self, List{ Token } tokens)
 			Expr* expr;
 			fault error;
 			switch {
+				case self.cursor.match(EOF): break;
+				// top level
 				case self.cursor.match(FN): {
 					error = @catch(
 						@try(expr, self.parse_function())
 					);
 					if (!error) self.ast.expressions.push(expr);
 				}
-				case self.cursor.match(OPEN_BRACE): {
-					error = @catch(
-						@try(expr, self.parse_block())
-					);
-					if (!error) self.ast.expressions.push(expr);
-				}
-				
+				// case self.cursor.match(OPEN_BRACE): {
+				// 	error = @catch(
+				// 		@try(expr, self.parse_block())
+				// 	);
+				// 	if (!error) self.ast.expressions.push(expr);
+				// }
 				default: {
 					error = @catch(
-						self.parse_statement_list(&self.ast.expressions)
+						@try(expr, self.parse_statement())
 					);
+					if (!error) self.ast.expressions.push(expr);
 				}
 			}
 				
@@ -125,7 +127,7 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 		
 	while (self.cursor.follows(SPACE)) {
 
-		Token tk = self.cursor.peek(KEEP_LF);
+		Token tk = self.cursor.peek(KEEP_SEP);
 		if (is_shell_call_terminator(tk.kind)) break;
 
 		if (self.cursor.follows(OPEN_PHARANTESIS)) {
@@ -289,7 +291,7 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 	Expr* expr = self.expr_head()!;
 	//& { expr_tail }
 	while (true) {
-		Token op = self.cursor.peek(KEEP_LF);
+		Token op = self.cursor.peek(KEEP_SEP);
 
 		//& "(" , [ argument_list ] , ")"
 		if (op.kind == OPEN_PHARANTESIS) {
@@ -434,13 +436,8 @@ fn Expr*? Parser.parse_statement(&self)
 	switch {
 		case self.cursor.match(RETURN): return self.parse_return();
 		case self.cursor.match(LET): return self.parse_binding();
-		default: {
-			// if (try assignment = self.parse_assignment()) {
-				// return assignment;
-			// }
-
-			return self.parse_expression();
-		}
+		case self.cursor.match(OPEN_BRACE): return self.parse_block();
+		default: return self.parse_expression();
 	}
 }
 
@@ -460,22 +457,28 @@ macro void? Parser.parse_statement_list(&self, List{ Expr* }* stmts, ...)
 	);
 }
 
-fn Expr*? Parser.parse_block(&self, Nullable{ Namespace* } nms = nullable::NULL)
-{
+fn Expr*? Parser.parse_block(&self,
+	Nullable{ Namespace* } nms = nullable::NULL
+){
 	Span start = self.cursor.advance().span;
 
 	Namespace* local_nms = nms.ptr;
-	if(nms.is_null()) {
-		local_nms = namespace::new_ref(self.allocator, nullable::value(self.nms));
-		defer {
-			local_nms.free(self.allocator);
-			alloc::free(self.allocator, local_nms);
-		}
+	// Create an owned nms if not provided
+	bool owned = nms.is_null();
+	if (owned) {
+		local_nms = namespace::new_ref(
+			self.allocator, nullable::value(self.nms)
+		);
 	}
-	
+	defer if (owned) {	
+		local_nms.free(self.allocator);
+		alloc::free(self.allocator, local_nms);
+	}
+
 	self.nms = local_nms;
 	defer {
 		self.nms = local_nms.parent.ptr;
+		io::printn(local_nms);
 	};
 	
 	List{ Expr* } stmts; stmts.init(mem);
@@ -538,7 +541,10 @@ fn Expr*? Parser.parse_function(&self)
 	}
 	
 	Namespace* fn_nms = namespace::new_ref(self.allocator, nullable::value(self.nms));
-	defer fn_nms.free(self.allocator);
+	defer {
+		fn_nms.free(self.allocator);
+		alloc::free(self.allocator, fn_nms);
+	}
 
 	foreach (param: params) {
 		fn_nms.add(param.copy(self.allocator));

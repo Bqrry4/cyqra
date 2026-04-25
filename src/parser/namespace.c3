@@ -1,7 +1,7 @@
 module cyqra::parser::namespace;
 import std::collections::set;
 import utils::nullable;
-
+import std::io;
 struct Namespace
 {
 	Nullable{ Namespace* } parent;

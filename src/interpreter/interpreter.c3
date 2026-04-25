@@ -214,14 +214,18 @@ fn Value? Interpreter.eval_binding(&self, Binding* expr)
 fn Value? Interpreter.eval_block(&self, Block* expr, Nullable{ Scope* } scope = nullable::NULL)
 {
 	Scope* local_scope = scope.ptr;
-	if(scope.is_null()) {
-		local_scope = scope::new_ref(self.allocator, nullable::value(self.scope));
-		defer {
-			local_scope.free();
-			alloc::free(self.allocator, local_scope);
-		}
+	// Create an owned scope if not provided
+	bool owned = scope.is_null();
+	if (owned) {
+		local_scope = scope::new_ref(
+			self.allocator, nullable::value(self.scope)
+		);	
 	}
-	
+	defer if (owned) {
+		local_scope.free();
+		alloc::free(self.allocator, local_scope);
+	}
+
 	self.scope = local_scope;
 	defer {
 		self.scope = local_scope.parent.ptr;
