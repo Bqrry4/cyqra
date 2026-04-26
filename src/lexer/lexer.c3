@@ -100,14 +100,9 @@ fn List{ Token } Lexer.analyze(&self, String source)
  
 fn void Lexer.emit(&self, TokenKind kind)
 {
-     String lexeme = self.cursor.captured();
      self.output.push({
           .kind = kind,
-          .span = {
-               .slice = lexeme,
-               .row = self.cursor.line,
-               .column = self.cursor.column
-          }
+          .span = self.cursor.captured_span()
      });
 
      self.cursor.sync_start();

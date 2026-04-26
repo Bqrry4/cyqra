@@ -15,7 +15,9 @@ fn Span Span.extend(&self, Span after) {
 	Backtrack n lines in the source
 	@warning "Unsafe: assumes @span is valid and correctly bounded."
 	@note "n == 0 will backtrack to the beginning of the current line"
-	@return "A new span, with a slice extended from n line behind to the given @span"
+	@return ```
+		A new span, with a slice extended from n line behind to the given @span,
+	```
 *>
 fn Span backtrack(String source, Span span, uint n)
 {
