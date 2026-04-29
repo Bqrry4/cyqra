@@ -78,12 +78,6 @@ fn void Parser.parse(&self, List{ Token } tokens)
 					);
 					if (!error) self.ast.expressions.push(expr);
 				}
-				// case self.cursor.match(OPEN_BRACE): {
-				// 	error = @catch(
-				// 		@try(expr, self.parse_block())
-				// 	);
-				// 	if (!error) self.ast.expressions.push(expr);
-				// }
 				default: {
 					error = @catch(
 						@try(expr, self.parse_statement())
@@ -120,13 +114,11 @@ fn bool is_shell_call_terminator(TokenKind kind)
 
 fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 {
-	Span start = self.cursor.peek(RAW).span;
-	
-	List{ Expr* } args;
-	args.init(mem);
+	Span start = callee.span;
+	List{ Expr* } args; args.init(mem);
 		
 	while (self.cursor.follows(SPACE)) {
-
+	
 		Token tk = self.cursor.peek(KEEP_SEP);
 		if (is_shell_call_terminator(tk.kind)) break;
 
@@ -139,60 +131,73 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 			continue;
 		}
 
-		List{ StringPart } parts;
-		parts.init(mem);
-		//@ consume tokens greedily until terminator 
-		do {
-			self.cursor.advance();
-			StringPart part;
-			switch (tk.kind) {
-				case INTERP_START: {
-					part = {
-						.kind = INTERP,
-						.interp = self.parse_expression()! 
-					};
-					if (!self.cursor.follows(INTERP_END)) {
-						self.fill_diagnostic("expected ']'");
-						return ast::INVALID_EXPRESSION~;			
-					}
-				}
-				case INTERP_IDENT: {
-					tk = self.cursor.advance();
-					if (tk.kind != IDENTIFIER) {
-						self.fill_diagnostic("expected identifier");
-						return ast::INVALID_EXPRESSION~;	
-					}
-					Expr* ident = expr::@new(Primary,
-						{ .token = tk },
-						self.stmt_span(start)
-					);
-					part = {
-						.kind = INTERP,
-						.interp = ident
-					};
-				}
-				default: part = {
-					.kind = TEXT,
-					.text = tk.span.slice 	
-				};	
-			}
-			
-			parts.push(part);
-			
-			tk = self.cursor.peek(RAW);
-		} while (!is_shell_call_terminator(tk.kind));
-
-		args.push(expr::@new(StringLit,
-			{ parts },
-			self.stmt_span(start)
-		));
+		args.push(self.parse_shell_arg()!);
 	}
-	
+
 	return expr::@new(Call,
 		{ callee, args },
 		self.stmt_span(start)
 	);
 }
+
+fn Expr*? Parser.parse_shell_arg(&self)
+{
+	Span start = self.cursor.peek(RAW).span;
+
+	List{ StringPart } parts;
+	parts.init(mem);
+
+	Token tk;
+	//@ consume tokens greedily until terminator 
+	do {
+		tk = self.cursor.advance();
+
+		StringPart part;
+		switch (tk.kind) {
+			case INTERP_START: {
+				part = {
+					.kind = INTERP,
+					.interp = self.parse_expression()! 
+				};
+				if (!self.cursor.follows(INTERP_END)) {
+					self.fill_diagnostic("expected ']'");
+					return ast::INVALID_EXPRESSION~;			
+				}
+			}
+			case INTERP_IDENT: {
+				Span ident_span = tk.span;
+				tk = self.cursor.advance();
+				if (tk.kind != IDENTIFIER) {
+					self.fill_diagnostic("expected identifier");
+					return ast::INVALID_EXPRESSION~;	
+				}
+				Expr* ident = expr::@new(Primary,
+					{ .token = tk },
+					self.stmt_span(ident_span)
+				);
+				part = {
+					.kind = INTERP,
+					.interp = ident
+				};
+			}
+			default: part = {
+				.kind = TEXT,
+				.text = tk.span.slice 	
+			};	
+		}
+		
+		parts.push(part);
+
+		// check if there's more to follow
+		tk = self.cursor.peek(RAW);
+	} while (!is_shell_call_terminator(tk.kind));
+
+	return expr::@new(StringLit,
+		{ parts },
+		self.stmt_span(start)
+	);
+}
+
 
 fn Expr*? Parser.expr_head(&self)
 {
@@ -448,8 +453,8 @@ fn Expr*? Parser.parse_statement(&self)
 macro void? Parser.parse_statement_list(&self, List{ Expr* }* stmts, ...)
 {
 	do {
-	    $for var $i = 0; $i < $vacount; $i++:
-			if (self.cursor.match($vaconst[$i])) break;
+	    $for var $i = 0; $i < $vaarg.len; $i++:
+			if (self.cursor.match($vaarg[$i])) break;
     	$endfor
 		stmts.push(self.parse_statement()!);
     } while (self.cursor.follows(NEW_LINE)
@@ -478,7 +483,6 @@ fn Expr*? Parser.parse_block(&self,
 	self.nms = local_nms;
 	defer {
 		self.nms = local_nms.parent.ptr;
-		io::printn(local_nms);
 	};
 	
 	List{ Expr* } stmts; stmts.init(mem);
