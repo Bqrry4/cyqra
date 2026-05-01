@@ -12,7 +12,6 @@ struct Parser
 {
 	Allocator allocator;
 
-	OperatorDef ops_def;
 	Ast ast;
 	Namespace* nms;
 	
@@ -22,13 +21,11 @@ struct Parser
 
 fn Parser new(Allocator allocator, Diagnostic* diagnostic)
 {
-	OperatorDef ops_def = op::new();
 	Ast ast = ast::new(allocator);
 	Namespace* nms = namespace::new_ref(allocator);
 	return {
 		.allocator = allocator,
 		.nms = nms,
-		.ops_def = ops_def,
 		.diagnostic = diagnostic
 	};
 }
@@ -101,280 +98,6 @@ fn bool is_line_terminator(TokenKind kind)
 		kind == EOF;
 }
 
-<* [ \n;|})] *>
-fn bool is_shell_call_terminator(TokenKind kind)
-{
-	return is_line_terminator(kind) ||
-		kind == SPACE ||
-		kind == PIPE ||
-		kind == CLOSED_BRACE ||
-		kind == CLOSED_PHARANTESIS ||
-		kind == EOF;
-}
-
-fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
-{
-	Span start = callee.span;
-	List{ Expr* } args; args.init(mem);
-		
-	while (self.cursor.follows(SPACE)) {
-	
-		Token tk = self.cursor.peek(KEEP_SEP);
-		if (is_shell_call_terminator(tk.kind)) break;
-
-		if (self.cursor.follows(OPEN_PHARANTESIS)) {
-			args.push(self.parse_expression()!);
-			if (!self.cursor.follows(CLOSED_PHARANTESIS)) {
-				self.fill_diagnostic("expected ')'");
-				return ast::INVALID_EXPRESSION~;
-			}
-			continue;
-		}
-
-		args.push(self.parse_shell_arg()!);
-	}
-
-	return expr::@new(Call,
-		{ callee, args },
-		self.stmt_span(start)
-	);
-}
-
-fn Expr*? Parser.parse_shell_arg(&self)
-{
-	Span start = self.cursor.peek(RAW).span;
-
-	List{ StringPart } parts;
-	parts.init(mem);
-
-	Token tk;
-	//@ consume tokens greedily until terminator 
-	do {
-		tk = self.cursor.advance();
-
-		StringPart part;
-		switch (tk.kind) {
-			case INTERP_START: {
-				part = {
-					.kind = INTERP,
-					.interp = self.parse_expression()! 
-				};
-				if (!self.cursor.follows(INTERP_END)) {
-					self.fill_diagnostic("expected ']'");
-					return ast::INVALID_EXPRESSION~;			
-				}
-			}
-			case INTERP_IDENT: {
-				Span ident_span = tk.span;
-				tk = self.cursor.advance();
-				if (tk.kind != IDENTIFIER) {
-					self.fill_diagnostic("expected identifier");
-					return ast::INVALID_EXPRESSION~;	
-				}
-				Expr* ident = expr::@new(Primary,
-					{ .token = tk },
-					self.stmt_span(ident_span)
-				);
-				part = {
-					.kind = INTERP,
-					.interp = ident
-				};
-			}
-			default: part = {
-				.kind = TEXT,
-				.text = tk.span.slice 	
-			};	
-		}
-		
-		parts.push(part);
-
-		// check if there's more to follow
-		tk = self.cursor.peek(RAW);
-	} while (!is_shell_call_terminator(tk.kind));
-
-	return expr::@new(StringLit,
-		{ parts },
-		self.stmt_span(start)
-	);
-}
-
-
-fn Expr*? Parser.expr_head(&self)
-{
-	Span start = self.cursor.peek(RAW).span;
-
-	Token tk = self.cursor.advance();
-	switch(tk.kind) {
-		//& literal
-		case INTEGER:
-		case FLOAT:
-			return expr::@new(Primary,
-				{ .token = tk },
-				self.stmt_span(start)
-			);
-		case D_QUOTES: {
-			List{ StringPart } parts;
-			parts.init(mem);
-
-			while (!self.cursor.follows(D_QUOTES)) {
-				StringPart part;
-				tk = self.cursor.advance();
-				
-				switch (tk.kind) {
-					case STRING_PART:
-						part = {
-							.kind = TEXT,
-							.text = tk.span.slice 	
-						};
-					case INTERP_START:
-						part = {
-							.kind = INTERP,
-							.interp = self.parse_expression()! 
-						};
-						if (!self.cursor.follows(INTERP_END)) {
-							self.fill_diagnostic("expected '}'");
-							return ast::INVALID_EXPRESSION~;			
-						}
-					//TODO parse only identifier
-					case INTERP_IDENT:
-						part = {
-							.kind = INTERP,
-							.interp = self.parse_expression()!
-						};
-					default:
-						unreachable("Unexpected token in string body");
-				}
-				parts.push(part);
-			}
-			return expr::@new(StringLit,
-				{ parts },
-				self.stmt_span(start)
-			);
-		}
-		//& identifier
-		//& shell_call 
-		case IDENTIFIER: {
-			Expr* primary = expr::@new(Primary,
-				{ .token = tk },
-				self.stmt_span(start)
-			);
-
-			if (self.nms.has(tk.span.slice) ||
-				self.cursor.match(OPEN_PHARANTESIS, RAW)
-			) return primary;
-
-			return self.parse_shell_call(primary);
-		}	
-		//& sub_expression 
-		case OPEN_PHARANTESIS:
-			Expr* expr = self.parse_expression()!;
-			if(!self.cursor.follows(CLOSED_PHARANTESIS)) {
-				self.fill_diagnostic("expected ')'");
-				return ast::INVALID_EXPRESSION~;
-			}	
-			return expr;
-		default:
-			//& prefix_op , expression
-			if(try prec = self.ops_def.check_prefix_op(tk.kind)) {
-				Expr* rhs = self.parse_expression(prec)!;
-				return expr::@new(Prefix,
-					{ .op = tk.kind, .rhs = rhs },
-					self.stmt_span(start)
-				);
-			}
-			// ast::INVALID_EXPRESSION~!!;
-			io::printn(tk);
-			self.fill_diagnostic("unexpected token");
-			return ast::INVALID_EXPRESSION~;
-	}
-}
-
-fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
-{
-	Span start = self.cursor.peek(RAW).span;
-
-	Expr* expr = self.expr_head()!;
-	//& { expr_tail }
-	while (true) {
-		Token op = self.cursor.peek(KEEP_SEP);
-
-		//& "(" , [ argument_list ] , ")"
-		if (op.kind == OPEN_PHARANTESIS) {
-			self.cursor.advance();
-
-			List{ Expr* } args;
-			args.init(mem);
-			
-			if (!self.cursor.follows(CLOSED_PHARANTESIS))
-        	{
-            	do {
-                	args.push(self.parse_expression()!);
-    	        } while (self.cursor.follows(COMMA));
-
-				if(!self.cursor.follows(CLOSED_PHARANTESIS)) {
-					self.fill_diagnostic("expected ')'");
-					return ast::INVALID_EXPRESSION~;				
-				}
-         	}
-			
-			expr = expr::@new(Call,
-				{ expr, args },
-				self.stmt_span(start)
-			);
-			continue;
-		}
-		//& "[" , expression , "]"
-		if (op.kind == OPEN_BRACKET) {
-			self.cursor.advance();
-			
-			Expr* index = self.parse_expression()!;
-			if(!self.cursor.follows(CLOSED_BRACKET)) {
-				self.fill_diagnostic("expected '}'");
-				return ast::INVALID_EXPRESSION~;				
-			}
-
-			expr = expr::@new(Index,
-				{ expr, index },
-				self.stmt_span(start)
-			);
-			continue;
-		}
-		//& postfix_op
-		if (try prec = self.ops_def.check_postfix_op(op.kind)) {
-			self.cursor.advance();
-			
-			expr = expr::@new(Postfix,
-				{ expr, op.kind },
-				self.stmt_span(start)
-			);
-			continue;	
-		}
-
-		//! TODO: Check for a possible continuation "\",
-		// when present skip it and continue the expression,
-		// otherwise lookahead for permitted ops with implicit continuation, like (&&, ||) 
-		if (op.kind == NEW_LINE) {
-			//self.skip_spaces(skip_lf: true);
-			
-		}
-		
-		//& infix_op , expression
-		if (try prec = self.ops_def.check_infix_op(op.kind, base_prec)) {
-			self.cursor.advance();
-			
-			Expr* rhs = self.parse_expression(prec)!;
-			expr = expr::@new(Infix,
-				{ expr, op.kind, rhs },
-				self.stmt_span(start)
-			);
-			continue;
-		}
-		break;
-	}
-	return expr;
-}
-
-
 fn Expr*? Parser.parse_binding(&self)
 {
 	Span start = self.cursor.advance().span;
@@ -400,7 +123,7 @@ fn Expr*? Parser.parse_binding(&self)
 		return ast::INVALID_EXPRESSION~;
 	}
 
-	if (is_line_terminator(self.cursor.peek(RAW).kind)) {
+	if (is_line_terminator(self.cursor.peek(KEEP_SEP).kind)) {
 		self.fill_diagnostic("missing expression following '='");
 		return ast::INVALID_EXPRESSION~;
 	}
@@ -426,8 +149,10 @@ fn Expr*? Parser.parse_return(&self)
 	Span start = self.cursor.peek(RAW).span;
 
 	Nullable{ Expr* } value = nullable::NULL;
-	if (try expr = self.parse_expression()) {
-		value = nullable::value(expr);
+	if (!is_line_terminator(self.cursor.peek(KEEP_SEP).kind)) {
+		value = nullable::value(
+			self.parse_expression()!
+		);
 	}
 
 	return expr::@new(Return,
@@ -522,7 +247,7 @@ fn Expr*? Parser.parse_function(&self)
 		return ast::INVALID_EXPRESSION~;
 	}
 
-	if (!self.cursor.follows(OPEN_PHARANTESIS)) {
+	if (!self.cursor.follows(OPEN_PARENTHESIS)) {
 		self.fill_diagnostic("missing '(' after function declaration");
 		return ast::INVALID_EXPRESSION~;
 	}
@@ -530,10 +255,10 @@ fn Expr*? Parser.parse_function(&self)
 	List{ String } params;
 	params.init(mem);
 	
-	if (!self.cursor.follows(CLOSED_PHARANTESIS)) {
+	if (!self.cursor.follows(CLOSED_PARENTHESIS)) {
 		self.parse_parameters(&params)!;
 
-		if (!self.cursor.follows(CLOSED_PHARANTESIS)) {
+		if (!self.cursor.follows(CLOSED_PARENTHESIS)) {
 			self.fill_diagnostic("expected ')'");
 			return ast::INVALID_EXPRESSION~;
 		}

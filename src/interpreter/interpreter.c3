@@ -141,49 +141,49 @@ fn Value? Interpreter.eval_infix(&self, Expr* expr)
 	}
 
 	switch (ifx.op) {
-		case PLUS: switch (lhs.kind) {
+		case ADD: switch (lhs.kind) {
 			case INT:
 				return value::_int(lhs._int + rhs._int);
 			case FLOAT:
 				return value::_float(lhs._float + rhs._float);
 			default: return UNSUPORTED_OP~;
 		}
-		case MINUS: switch(lhs.kind) {
+		case SUB: switch(lhs.kind) {
 			case INT:
 				return value::_int(lhs._int - rhs._int);
 			case FLOAT:
 				return value::_float(lhs._float - rhs._float);
 			default: return UNSUPORTED_OP~;
 		}
-		case STAR: switch(lhs.kind) {
+		case MUL: switch(lhs.kind) {
 			case INT:
 				return value::_int(lhs._int * rhs._int);
 			case FLOAT:
 				return value::_float(lhs._float * rhs._float);
 			default: return UNSUPORTED_OP~;
 		}
-		case STAR_STAR: switch(lhs.kind) {
+		case POW: switch(lhs.kind) {
 			case INT:
 				return value::_float(math::pow((int)lhs._int, (int)rhs._int));
 			case FLOAT:
 				return value::_float(math::pow(lhs._float, rhs._float));
 			default: return UNSUPORTED_OP~;
 		}
-		case SLASH: switch(lhs.kind) {
+		case DIV: switch(lhs.kind) {
 			case INT:
 				return value::_float(lhs.as_float()._float / rhs._int);
 			case FLOAT:
 				return value::_float(lhs._float / rhs._float);
 			default: return UNSUPORTED_OP~;
 		}
-		case SLASH_SLASH: switch(lhs.kind) {
+		case FLOOR_DIV: switch(lhs.kind) {
 			case INT:
 				return value::_int(lhs._int / rhs._int);
 			case FLOAT:
 				return value::_float(lhs._float - rhs._float);
 			default: return UNSUPORTED_OP~;
 		}
-		case PERCENT: switch(lhs.kind) {
+		case MOD: switch(lhs.kind) {
 			case INT:
 				return value::_int(lhs._int % rhs._int);
 			case FLOAT:

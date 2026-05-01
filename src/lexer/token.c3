@@ -3,57 +3,55 @@ import cyqra::lexer::span;
 
 enum TokenKind : int @public
 {
-     RAW,
+    /* Operators */
+	PLUS, MINUS,
+	EXCLAMATION,
+	PLUS_PLUS, MINUS_MINUS,
+    STAR, STAR_STAR,
+    SLASH, SLASH_SLASH, PERCENT,
+	SHL, SHR,
+	LT, LTE, GT, GTE,
+	EQ, NEQ,
+	AND, OR,
+	AMPERSAND,
+    PIPE, PIPE_ALL,
+    DOT, DOTX2, DOTX3,
 
-     /* Operators */
-     PLUS, MINUS,
-     EXCLAMATION,
-     PLUS_PLUS, MINUS_MINUS,
-     STAR_STAR,
-     STAR, SLASH, SLASH_SLASH, PERCENT,
-     SHL, SHR,
-     LT, LTE, GT, GTE,
-     EQ, NEQ,
-     L_AND, L_OR,
-     PIPE, PIPE_ALL,
-     DOT, DOTX2, DOTX3,
-
-     ASGN,
-     PLUS_ASGN, MINUS_ASGN,
-     STAR_ASGN, SLASH_ASGN,
+    ASGN,
+    PLUS_ASGN, MINUS_ASGN,
+    STAR_ASGN, SLASH_ASGN,
      
-     /* Brackets */
-     OPEN_PHARANTESIS, CLOSED_PHARANTESIS,
-     OPEN_BRACE, CLOSED_BRACE,
-     OPEN_BRACKET, CLOSED_BRACKET,
+    /* Brackets */
+    OPEN_PARENTHESIS, CLOSED_PARENTHESIS,
+    OPEN_BRACE, CLOSED_BRACE,
+    OPEN_BRACKET, CLOSED_BRACKET,
 
-     /* literals */
-     INTEGER, FLOAT,
-     STRING,
+    /* literals */
+    INTEGER, FLOAT,
 
-     IDENTIFIER,
+    IDENTIFIER,
+    SEMICOLON, COMMA,
+    NEW_LINE, SPACE,
 
-     SEMICOLON, COMMA,
+    /* keywords */
+    LET, MUT, ENV,
+    IF, ELSE, WHILE,
+    FN, RETURN,
 
-     NEW_LINE, SPACE,
-
-     /* keywords */
-     LET, MUT, ENV,
-     IF, ELSE, WHILE,
-     FN, RETURN,
-
-     /* string */
-     D_QUOTES, DOLLAR_SIGN,
-     STRING_PART, ESCAPED_CHAR,
-     INTERP_START, INTERP_END,
-     INTERP_IDENT,        
-     EOF,
+    /* string */
+    D_QUOTES, DOLLAR_SIGN,
+    STRING_PART, ESCAPED_CHAR,
+    INTERP_START, INTERP_END,
+    INTERP_IDENT,
+             
+    /* special */
+    EOF,
+    RAW,
 }
-
-
+ 
 struct Token
 {
-     TokenKind kind;
-     Span span;
+	TokenKind kind;
+	Span span;
 }
 

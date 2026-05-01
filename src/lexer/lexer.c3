@@ -146,8 +146,8 @@ fn void? Lexer.lex_code(&self, char c)
                                       : self.emit(EQ);
           case '!': self.cursor.follows('=') ? self.emit(NEQ)
                                       : self.emit(EXCLAMATION);
-          case '(': self.emit(OPEN_PHARANTESIS);
-          case ')': self.emit(CLOSED_PHARANTESIS);
+          case '(': self.emit(OPEN_PARENTHESIS);
+          case ')': self.emit(CLOSED_PARENTHESIS);
           case '[': self.emit(OPEN_BRACKET);
           case ']': self.emit(CLOSED_BRACKET);
           case '{': {

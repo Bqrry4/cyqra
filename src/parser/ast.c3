@@ -34,6 +34,7 @@ module cyqra::parser::ast::expr;
 import cyqra::lexer;
 import cyqra::lexer::span;
 import utils::nullable;
+import cyqra::parser::op;
 
 import std::io;
 import std::collections::list;
@@ -61,18 +62,18 @@ struct Primary
 }
 struct Prefix
 {
-	TokenKind op;
+	Operator op;
 	Expr* rhs;	
 }
 struct Postfix
 {
 	Expr* lhs;
-	TokenKind op;
+	Operator op;
 }
 struct Infix
 {
 	Expr* lhs;
-	TokenKind op;
+	Operator op;
 	Expr* rhs;
 }
 struct Call

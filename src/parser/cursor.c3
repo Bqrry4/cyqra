@@ -53,6 +53,13 @@ fn Token Cursor.advance(&self)
 	if (self.eot()) return self.sentinel_token();
 	return (self.tokens[self.current++]);
 }
+
+macro Token Cursor.advance_check(&self, TokenKind expect)
+{
+	assert(self.peek(RAW).kind == expect);
+	return self.advance();
+}
+
 macro Token Cursor.peek(&self, CursorMode mode = NORMAL)
 {
 	if (mode != RAW) self.skip(mode == KEEP_SEP);
