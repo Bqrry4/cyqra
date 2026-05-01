@@ -216,7 +216,10 @@ fn void? Lexer.lex_text(&self, char c)
                if (is_identifier_char(self.cursor.peek())) {     
                     self.emit(INTERP_IDENT);
                     self.lex_identifier();
-               }                 
+                    break;
+               }
+               // treat it as normal text then
+               nextcase default;
           }
           case ' ':
           case '\n': {
@@ -236,7 +239,6 @@ fn void? Lexer.lex_text(&self, char c)
 fn bool Lexer.is_string_breaker(&self)
 {
      char c = self.cursor.peek();
-
      // Only a breaker when there's a possible identifier or start of a block" 
      if (c == '$') {
           char sc = self.cursor.peek(1);
@@ -244,10 +246,10 @@ fn bool Lexer.is_string_breaker(&self)
      }
 
      if (self.ctx().mode == RAW) {
-          return ascii::is_space(c);          
+          return !c || ascii::is_space(c);          
      }
      
-     return c == '\\' || c == '"'; 
+     return !c || c == '\\' || c == '"'; 
 }
 
 fn bool is_identifier_char(char c)
