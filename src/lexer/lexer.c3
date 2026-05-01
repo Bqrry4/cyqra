@@ -308,5 +308,9 @@ fn void Lexer.lex_identifier(&self)
 
 fn void Lexer.lex_comment(&self)
 {
-     while(self.cursor.peek() != '\n') self.cursor.advance();
+     while (true) {
+          char c = self.cursor.peek();
+          if (!c || c == '\n') break;
+          self.cursor.advance();
+     }
 }
