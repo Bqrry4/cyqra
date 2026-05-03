@@ -36,6 +36,8 @@ fn Expr*? Parser.expr_head(&self)
 		}	
 		//& sub_expression 
 		case OPEN_PARENTHESIS: return self.parse_subexpr();
+		case OPEN_BRACKET: return self.parse_array();
+		case OPEN_BRACE: return self.parse_record();
 		default: {
 			//& prefix_op , expression
 			if(try op = op::check_prefix(tk.kind)) {
@@ -119,6 +121,53 @@ fn Expr*? Parser.parse_subexpr(&self)
 	return expr;
 }
 
+
+fn Expr*? Parser.parse_array(&self)
+{
+	Span start = self.cursor.advance_check(OPEN_BRACKET).span;
+
+	List{ Expr* } init_vals;
+	init_vals.init(mem);
+	
+	if(!self.cursor.follows(CLOSED_BRACKET)) {
+    	do {
+         	init_vals.push(self.parse_expression()!);
+  	  	} while (self.cursor.follows(COMMA));
+
+		if (!self.cursor.follows(CLOSED_BRACKET)) {
+			self.fill_diagnostic("expected ']'");
+			return ast::INVALID_EXPRESSION~;				
+		}
+	}
+
+	return expr::@new(Array,
+		{ init_vals },
+		self.stmt_span(start)
+	);
+}
+fn Expr*? Parser.parse_record(&self)
+{
+	Span start = self.cursor.advance_check(OPEN_BRACE).span;
+
+	// List{ Expr* } init_vals;
+	// init_vals.init(mem);
+	
+	if(!self.cursor.follows(CLOSED_BRACE)) {
+    	// do {
+         	// init_vals.push(self.parse_expression()!);
+  	  	// } while (self.cursor.follows(COMMA));
+
+		if(!self.cursor.follows(CLOSED_BRACE)) {
+			self.fill_diagnostic("expected '}'");
+			return ast::INVALID_EXPRESSION~;				
+		}
+	}
+
+	return expr::@new(Record,
+		{  },
+		self.stmt_span(start)
+	);
+}
 fn StringPart? Parser.parse_interp_ident(&self)
 {
 	self.cursor.advance_check(INTERP_IDENT);
@@ -213,7 +262,7 @@ fn Expr*? Parser.parse_index(&self, Expr* indexed)
 	
 	Expr* index = self.parse_expression()!;
 	if(!self.cursor.follows(CLOSED_BRACKET)) {
-		self.fill_diagnostic("expected '}'");
+		self.fill_diagnostic("expected ']'");
 		return ast::INVALID_EXPRESSION~;				
 	}
 

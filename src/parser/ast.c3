@@ -53,7 +53,9 @@ enum ExprKind
 	BINDING,
 	BLOCK,
 	FUNCTION,
-	RETURN
+	RETURN,
+	ARRAY,
+	RECORD
 }
 
 struct Primary
@@ -106,6 +108,14 @@ struct Return
 {
 	Nullable { Expr* } value;
 }
+struct Array
+{
+	List{ Expr* } init_values;
+}
+struct Record
+{
+	List{ Expr* } init_values;
+}
 
 enum StringPartKind
 {
@@ -140,6 +150,8 @@ struct Expr
 		Block block;
 		Function fun;
 		Return ret;
+		Array array;
+		Record record;
 	}
 	Span span;
 	ExprKind kind;

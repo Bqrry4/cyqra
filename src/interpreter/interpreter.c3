@@ -73,11 +73,12 @@ fn Value? Interpreter.eval(&self, Expr* expr)
 		// case POSTFIX: expr.postfix.eval();
 		case INFIX: return self.eval_infix(expr);
 		case CALL: return self.eval_call(expr);
-		// case INDEX: expr.index.eval();
+		case INDEX: return self.eval_index(expr);
 		case BINDING: return self.eval_binding(expr);
 		case BLOCK: return self.eval_block(&expr.block);
 		case FUNCTION: return self.eval_fn(expr);
 		case RETURN: return self.eval_return(expr);
+		case ARRAY: return self.eval_array(expr);
 		default: io::printn("not implemented");
 	}
 	return value::UNIT;
@@ -340,4 +341,40 @@ fn Value? Interpreter.eval_return(&self, Expr* expr)
 		self.return_value = self.eval(ret.value.ptr)!;
 	}
 	return RETURN_STATEMENT~;
+}
+
+fn Value? Interpreter.eval_array(&self, Expr* expr)
+{
+	Array* arr = &expr.array;
+
+	List{ Value } values; values.init(self.allocator);
+	foreach (expr_val : arr.init_values) {
+		values.push(self.eval(expr_val)!);
+	}
+	return {
+		.kind = ARRAY,
+		._array = { values }
+	};
+}
+
+fn Value? Interpreter.eval_index(&self, Expr* expr)
+{
+	Index* idx = &expr.index;
+	Value object = self.eval(idx.object)!;
+	Value index = self.eval(idx.index)!;
+
+	if (object.kind != ARRAY) {
+		self.diagnostic.error(idx.object.span, "value isn't indexable");
+		return RUNTIME_ERROR~;
+	}
+	if (index.kind != INT) {
+		self.diagnostic.error(idx.index.span, "value must be an INT");
+		return RUNTIME_ERROR~;
+	}
+	if (index._int < 0 || index._int >= object._array.values.len()) {
+		self.diagnostic.error(idx.index.span, "index out of bounds");
+		return RUNTIME_ERROR~;
+	}
+		
+	return object._array.values[index._int];
 }

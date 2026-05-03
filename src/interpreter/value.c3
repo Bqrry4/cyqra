@@ -11,12 +11,20 @@ enum ValueKind
 	INT,
 	FLOAT,
 	STRING,
-	FUNCTION	
+	FUNCTION,
+	ARRAY,
+	RECORD
 }
 
-struct Fn {
+struct Fn
+{
 	List{ String } params;
 	Block* body;
+}
+
+struct Array_v
+{
+	List{ Value } values;
 }
 
 struct Value
@@ -27,6 +35,7 @@ struct Value
 		double _float;
 		String _string;
 		Fn _fn;
+		Array_v _array;
 	}
 }
 
@@ -98,5 +107,19 @@ fn String Value.to_string(&self, Allocator allocator)
 		case INT: return string::format(allocator, "%d", self._int);
 		case FLOAT: return string::format(allocator, "%g", self._float);
 		case FUNCTION: return string::format(allocator, "Function");
+		case ARRAY: {
+			DString str; str.init(allocator);
+			defer str.free();
+
+			str.append("[");
+			foreach (i, val: self._array.values) {
+				if (i > 0) str.append(", ");
+				str.append(val.to_string(allocator));
+			}
+			str.append("]");
+
+			return str.copy_str(allocator);
+		} 
+		case RECORD: return string::format(allocator, "");
 	}
 }
