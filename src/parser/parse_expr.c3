@@ -126,22 +126,22 @@ fn Expr*? Parser.parse_array(&self)
 {
 	Span start = self.cursor.advance_check(OPEN_BRACKET).span;
 
-	List{ Expr* } init_vals;
-	init_vals.init(mem);
+	List{ Expr* } elements;
+	elements.init(mem);
+
+    while (!self.cursor.match(CLOSED_BRACKET)) {
+        elements.push(self.parse_expression()!);
+
+        if (!self.cursor.follows(COMMA)) break;
+     }
+
+    if (!self.cursor.follows(CLOSED_BRACKET)) {
+        self.fill_diagnostic("expected ']'");
+        return ast::INVALID_EXPRESSION~;
+    }
 	
-	if(!self.cursor.follows(CLOSED_BRACKET)) {
-    	do {
-         	init_vals.push(self.parse_expression()!);
-  	  	} while (self.cursor.follows(COMMA));
-
-		if (!self.cursor.follows(CLOSED_BRACKET)) {
-			self.fill_diagnostic("expected ']'");
-			return ast::INVALID_EXPRESSION~;				
-		}
-	}
-
 	return expr::@new(Array,
-		{ init_vals },
+		{ elements },
 		self.stmt_span(start)
 	);
 }
@@ -149,15 +149,12 @@ fn Expr*? Parser.parse_record(&self)
 {
 	Span start = self.cursor.advance_check(OPEN_BRACE).span;
 
-	// List{ Expr* } init_vals;
-	// init_vals.init(mem);
+	List{ Expr* } init_vals;
+	init_vals.init(mem);
 	
 	if(!self.cursor.follows(CLOSED_BRACE)) {
-    	// do {
-         	// init_vals.push(self.parse_expression()!);
-  	  	// } while (self.cursor.follows(COMMA));
 
-		if(!self.cursor.follows(CLOSED_BRACE)) {
+    	if(!self.cursor.follows(CLOSED_BRACE)) {
 			self.fill_diagnostic("expected '}'");
 			return ast::INVALID_EXPRESSION~;				
 		}
@@ -238,18 +235,18 @@ fn Expr*? Parser.parse_call(&self, Expr* callee)
 	self.cursor.advance_check(OPEN_PARENTHESIS);
 	List{ Expr* } args;
 	args.init(mem);
-	
-	if (!self.cursor.follows(CLOSED_PARENTHESIS)) {
-    	do {
-         	args.push(self.parse_expression()!);
-  	  	} while (self.cursor.follows(COMMA));
 
-		if(!self.cursor.follows(CLOSED_PARENTHESIS)) {
-			self.fill_diagnostic("expected ')'");
-			return ast::INVALID_EXPRESSION~;				
-		}
-    }
-	
+	while (!self.cursor.match(CLOSED_PARENTHESIS)) {
+        args.push(self.parse_expression()!);
+
+        if (!self.cursor.follows(COMMA)) break;
+     }
+
+    if (!self.cursor.follows(CLOSED_PARENTHESIS)) {
+        self.fill_diagnostic("expected ')'");
+        return ast::INVALID_EXPRESSION~;
+    }	
+ 		
 	return expr::@new(Call,
 		{ callee, args },
 		self.stmt_span(callee.span)
