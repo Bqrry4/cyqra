@@ -21,7 +21,8 @@ enum Operator
 	FLOOR_DIV, POW,
     DOT_ACCESS,
     NOT,
-	EXEC_ASYNC
+	EXEC_ASYNC,
+	ASIGNMENT,
 }
 
 struct OperatorDef
@@ -38,16 +39,17 @@ const Operator[] PREFIX = {
 	[TokenKind.EXCLAMATION] = NOT,
 };
 const OperatorDef[] POSTFIX = {
-	[TokenKind.AMPERSAND] = { EXEC_ASYNC, 0 },
+	[TokenKind.AMP] = { EXEC_ASYNC, 2 },
 	
 };
 const Pair{ OperatorDef, Associativity }[] INFIX = {
-	[TokenKind.STAR_STAR] = {{ POW, 13 }, LEFT},
+	[TokenKind.STARX2] = {{ POW, 13 }, LEFT},
 	[TokenKind.STAR] = {{ MUL, 12 }, LEFT},
 	[TokenKind.SLASH] = {{ DIV, 12 }, LEFT},
 	[TokenKind.PERCENT] = {{ MOD, 12}, LEFT},
 	[TokenKind.PLUS] = {{ADD, 11}, LEFT},
 	[TokenKind.MINUS] = {{SUB, 11}, LEFT},
+	[TokenKind.EQ] = {{ASIGNMENT, 1}, RIGHT},
 };
 
 fn Operator? check_prefix(TokenKind tk)

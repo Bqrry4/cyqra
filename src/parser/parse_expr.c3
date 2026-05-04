@@ -126,8 +126,7 @@ fn Expr*? Parser.parse_array(&self)
 {
 	Span start = self.cursor.advance_check(OPEN_BRACKET).span;
 
-	List{ Expr* } elements;
-	elements.init(mem);
+	List{ Expr* } elements; elements.init(mem);
 
     while (!self.cursor.match(CLOSED_BRACKET)) {
         elements.push(self.parse_expression()!);
@@ -149,19 +148,38 @@ fn Expr*? Parser.parse_record(&self)
 {
 	Span start = self.cursor.advance_check(OPEN_BRACE).span;
 
-	List{ Expr* } init_vals;
-	init_vals.init(mem);
-	
-	if(!self.cursor.follows(CLOSED_BRACE)) {
-
-    	if(!self.cursor.follows(CLOSED_BRACE)) {
-			self.fill_diagnostic("expected '}'");
-			return ast::INVALID_EXPRESSION~;				
+	List{ RecordField } fields; fields.init(mem);
+	while (!self.cursor.match(CLOSED_BRACE)) {
+		Token tk = self.cursor.peek();
+		Expr* key;
+		switch (tk.kind) {
+			case IDENTIFIER:
+				key = self.parse_ident();
+			case D_QUOTES:
+				key = self.parse_str()!;
+			default: {
+		    	self.fill_diagnostic("expected field name");
+            	return ast::INVALID_EXPRESSION~;
+			}
 		}
+
+        if (!self.cursor.follows(COLON)) {
+            self.fill_diagnostic("expected ':' after field name");
+            return ast::INVALID_EXPRESSION~;
+        }
+		Expr* value = self.parse_expression()!;
+        fields.push({ key, value });
+	
+		if (!self.cursor.follows(COMMA)) break;
 	}
 
+	if (!self.cursor.follows(CLOSED_BRACE)) {
+        self.fill_diagnostic("expected '}'");
+        return ast::INVALID_EXPRESSION~;
+    }
+	
 	return expr::@new(Record,
-		{  },
+		{ fields },
 		self.stmt_span(start)
 	);
 }

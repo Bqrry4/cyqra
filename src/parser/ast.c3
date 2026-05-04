@@ -112,9 +112,17 @@ struct Array
 {
 	List{ Expr* } init_values;
 }
+
+struct RecordField
+{
+	<* identifier or string *>
+	Expr* key;
+	Expr* value;
+}
+
 struct Record
 {
-	List{ Expr* } init_values;
+	List{ RecordField } fields;
 }
 
 enum StringPartKind

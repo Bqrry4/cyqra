@@ -2,6 +2,7 @@ module cyqra::interpreter;
 import std::io;
 import std::math;
 import std::collections::list;
+import std::collections::map;
 import std::os::process;
 
 import cyqra::lexer::token;
@@ -33,8 +34,7 @@ struct Interpreter
 fn Interpreter new(
 	Allocator allocator,
 	Diagnostic* diagnostic
-)
-{
+){
 	Scope* scope = scope::new_ref(allocator);
 	return {
 		.allocator = allocator,
@@ -79,6 +79,7 @@ fn Value? Interpreter.eval(&self, Expr* expr)
 		case FUNCTION: return self.eval_fn(expr);
 		case RETURN: return self.eval_return(expr);
 		case ARRAY: return self.eval_array(expr);
+		case RECORD: return self.eval_record(expr);
 		default: io::printn("not implemented");
 	}
 	return value::UNIT;
@@ -356,25 +357,65 @@ fn Value? Interpreter.eval_array(&self, Expr* expr)
 		._array = { values }
 	};
 }
+fn Value? Interpreter.eval_record(&self, Expr* expr)
+{
+	Record* rec = &expr.record;
+	HashMap{ String, Value } values; values.init(self.allocator);
+
+	foreach (field : rec.fields) {
+		//TODO: remake identifiers to a separate, non-primary struct
+		String key;
+		if (field.key.primary.token.kind == IDENTIFIER) {
+			key = field.key.primary.token.span.slice.copy(self.allocator);
+		} else {
+			key = self.eval(field.key).to_string(self.allocator)!;
+		}
+		Value value = self.eval(field.value)!;
+		values.set(key, value);
+	}
+	return {
+		.kind = RECORD,
+		._record = { values }
+	};
+}
 
 fn Value? Interpreter.eval_index(&self, Expr* expr)
 {
 	Index* idx = &expr.index;
+	Value index_v = self.eval(idx.index)!;
 	Value object = self.eval(idx.object)!;
-	Value index = self.eval(idx.index)!;
-
-	if (object.kind != ARRAY) {
-		self.diagnostic.error(idx.object.span, "value isn't indexable");
-		return RUNTIME_ERROR~;
-	}
-	if (index.kind != INT) {
-		self.diagnostic.error(idx.index.span, "value must be an INT");
-		return RUNTIME_ERROR~;
-	}
-	if (index._int < 0 || index._int >= object._array.values.len()) {
-		self.diagnostic.error(idx.index.span, "index out of bounds");
-		return RUNTIME_ERROR~;
-	}
+	switch (object.kind) {
+		case ARRAY: {
+			if (index_v.kind != INT) {
+				self.diagnostic.error(idx.index.span, "provided value vas not an INT");
+				return RUNTIME_ERROR~;
+			}
+			long index = index_v._int;
 		
-	return object._array.values[index._int];
+			if (index < 0 || index >= object._array.values.len()) {
+				self.diagnostic.error(idx.index.span, "index out of bounds");
+				return RUNTIME_ERROR~;
+			}
+			return object._array.values[index];
+		}
+		case RECORD: {
+			if (index_v.kind != STRING) {
+				self.diagnostic.error(idx.index.span, "provided value was not a STRING");
+				return RUNTIME_ERROR~;
+			}
+			String index = index_v._string;
+			if (!object._record.values.has_key(index)) {
+				self.diagnostic.error(idx.index.span, "cannot find field");
+				return RUNTIME_ERROR~;
+			}
+
+			return object._record.values[index];
+		}
+		default: {
+			self.diagnostic.error(idx.object.span, "value isn't indexable");
+			return RUNTIME_ERROR~;
+		}
+	}
+			
+	
 }

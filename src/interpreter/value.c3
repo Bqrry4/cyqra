@@ -2,6 +2,7 @@ module cyqra::interpreter::value;
 import std::io;
 import std::collections::pair;
 import std::collections::list;
+import std::collections::map;
 
 import cyqra::parser::ast;
 
@@ -27,6 +28,10 @@ struct Array_v
 	List{ Value } values;
 }
 
+struct Record_v
+{
+	HashMap{ String, Value } values;
+}
 struct Value
 {
 	ValueKind kind;
@@ -36,6 +41,7 @@ struct Value
 		String _string;
 		Fn _fn;
 		Array_v _array;
+		Record_v _record;
 	}
 }
 
@@ -120,6 +126,21 @@ fn String Value.to_string(&self, Allocator allocator)
 
 			return str.copy_str(allocator);
 		} 
-		case RECORD: return string::format(allocator, "");
+		case RECORD: {
+			DString str; str.init(allocator);
+			defer str.free();
+
+			str.append("{");
+			int i = 0;
+			self._record.values.@each(; key, value) {
+				if (i++ >0)	str.append(", ");
+				str.append(key);
+				str.append(": ");
+				str.append(value.to_string(allocator));
+			};
+			str.append("}");
+
+			return str.copy_str(allocator);
+		}
 	}
 }
