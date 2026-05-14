@@ -22,9 +22,15 @@ fn void parse_fn_with_params_body()
     assert_params(fun.params, "x", "y");
 	Block* blk = unwrap_block(fun.body);
 	assert(blk.stmts.len() == 1);
-	Infix* ifx = unwrap_infix(unwrap_nth(blk.stmts, 0), MINUS);
+	Infix* ifx = unwrap_infix(unwrap_nth(blk.stmts, 0), SUB);
     assert_token(unwrap_primary(ifx.lhs), "x");
     assert_token(unwrap_primary(ifx.rhs), "y");
+}
+fn void parse_lambda_empty()
+{
+	Ast ast = parse(`
+		&{}
+    `);
 }
 <* Calls *>
 /* Fp style */

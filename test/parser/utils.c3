@@ -26,7 +26,7 @@ macro Primary* unwrap_primary(Expr* expr)
     assert(expr.kind == PRIMARY, "PRIMARY != %s", expr.kind);
     return &expr.primary;
 }
-macro Infix* unwrap_infix(Expr* expr, TokenKind op)
+macro Infix* unwrap_infix(Expr* expr, Operator op)
 {
     assert(expr.kind == INFIX, "INFIX != %s", expr.kind);
     assert(expr.infix.op == op, "op %s != %s", op, expr.infix.op);
@@ -41,10 +41,10 @@ macro Function* unwrap_fn_decl(Expr* expr, String name)
 }
 macro void assert_params(List {String} params, ...)
 {
-    assert(params.len() == $vacount,
-        "Expected %d params got %d", $vacount, params.len());
-	$for var $i = 0; $i < $vacount; $i++:
-        assert(params[$i] == $vaconst[$i]);
+    assert(params.len() == $vaarg.len,
+        "Expected %d params got %d", $vaarg.len, params.len());
+	$for var $i = 0; $i < $vaarg.len; $i++:
+        assert(params[$i] == $vaarg[$i]);
     $endfor  
 }
 macro Block* unwrap_block(Expr* expr)
@@ -70,4 +70,30 @@ macro StringPart* unwrap_nth_str_part(StringLit* str, uint n, StringPartKind exp
     assert(part.kind == expected);
     return part;
 }
-
+macro Prefix* unwrap_prefix(Expr* expr, Operator op)
+{
+    assert(expr.kind == PREFIX);
+    assert(expr.prefix.op == op);
+    return &expr.prefix;
+}
+macro Postfix* unwrap_postfix(Expr* expr, Operator op)
+{
+    assert(expr.kind == POSTFIX);
+    assert(expr.postfix.op == op);
+    return &expr.postfix;
+}
+macro Array* unwrap_array(Expr* expr)
+{
+    assert(expr.kind == ARRAY);
+    return &expr.array;
+}
+macro Record* unwrap_record(Expr* expr)
+{
+    assert(expr.kind == RECORD);
+    return &expr.record;
+}
+macro Index* unwrap_index(Expr* expr)
+{
+    assert(expr.kind == INDEX);
+    return &expr.index;
+}
