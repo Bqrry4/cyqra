@@ -29,11 +29,10 @@ fn void Scope.free(&self)
 	self.bindings.free();
 }
 
-fn Value? Scope.get(&self, String ident) @operator([])
-{
-	Value? val = self.bindings[ident];
+fn Value*? Scope.get_ref(&self, String ident) {
+	Value*? val = self.bindings.get_ref(ident);
 	if (!(@ok(val) || self.parent.is_null())) {
-		val = self.parent.ptr.get(ident);
+		val = self.parent.ptr.get_ref(ident);
 	}
     return val;
 }

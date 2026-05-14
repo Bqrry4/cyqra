@@ -166,7 +166,6 @@ fn Expr*? Parser.parse_statement(&self)
 	switch {
 		case self.cursor.match(RETURN): return self.parse_return();
 		case self.cursor.match(LET): return self.parse_binding();
-		case self.cursor.match(OPEN_BRACE): return self.parse_block();
 		default: return self.parse_expression();
 	}
 }
@@ -187,33 +186,20 @@ macro void? Parser.parse_statement_list(&self, List{ Expr* }* stmts, ...)
 	);
 }
 
-fn Expr*? Parser.parse_block(&self,
-	Nullable{ Namespace* } nms = nullable::NULL
-){
-	Span start = self.cursor.advance().span;
-
-	Namespace* local_nms = nms.ptr;
-	// Create an owned nms if not provided
-	bool owned = nms.is_null();
-	if (owned) {
-		local_nms = namespace::new_ref(
-			self.allocator, nullable::value(self.nms)
-		);
-	}
-	defer if (owned) {	
-		local_nms.free(self.allocator);
-		alloc::free(self.allocator, local_nms);
-	}
-
-	self.nms = local_nms;
+fn Expr*? Parser.parse_block_body(&self, Namespace* nms, Span start)
+{
+	// Switch scope
+	self.nms = nms;
 	defer {
-		self.nms = local_nms.parent.ptr;
+		self.nms = nms.parent.ptr;
 	};
 	
 	List{ Expr* } stmts; stmts.init(mem);
-
 	self.parse_statement_list(&stmts, CLOSED_BRACE)!;
+
 	if (!self.cursor.follows(CLOSED_BRACE)) {
+	
+	io::printn(self.cursor.peek());
 		self.fill_diagnostic("expected '}'");
 		return ast::INVALID_EXPRESSION~;
 	}
@@ -222,6 +208,23 @@ fn Expr*? Parser.parse_block(&self,
 		{ stmts },
 		self.stmt_span(start)
 	);
+}
+
+
+
+fn Expr*? Parser.parse_block(&self)
+{
+	Span start = self.cursor.advance().span;
+
+	Namespace* nms = namespace::new_ref(
+		self.allocator, nullable::value(self.nms)
+	);
+	defer {	
+		nms.free(self.allocator);
+		alloc::free(self.allocator, nms);
+	}
+	
+	return self.parse_block_body(nms, start);
 }
 
 fn void? Parser.parse_parameters(&self, List{ String }* params)
@@ -235,6 +238,21 @@ fn void? Parser.parse_parameters(&self, List{ String }* params)
 		self.cursor.advance();
 		params.push(tk.span.slice);
 	} while (self.cursor.follows(COMMA));
+}
+
+fn Expr*? Parser.parse_function_body(&self, List{ String } params)
+{
+	Namespace* fn_nms = namespace::new_ref(self.allocator, nullable::value(self.nms));
+	defer {
+		fn_nms.free(self.allocator);
+		alloc::free(self.allocator, fn_nms);
+	}
+
+	foreach (param: params) {
+		fn_nms.add(param.copy(self.allocator));
+	}
+	
+	return self.parse_block_body(fn_nms, self.cursor.peek().span);
 }
 
 fn Expr*? Parser.parse_function(&self)
@@ -264,22 +282,12 @@ fn Expr*? Parser.parse_function(&self)
 		}
 	}
 
-	if(!self.cursor.match(OPEN_BRACE)) {
-		self.fill_diagnostic("expected block");
+	if(!self.cursor.follows(OPEN_BRACE)) {
+		self.fill_diagnostic("expected '{'");
 		return ast::INVALID_EXPRESSION~;
 	}
 	
-	Namespace* fn_nms = namespace::new_ref(self.allocator, nullable::value(self.nms));
-	defer {
-		fn_nms.free(self.allocator);
-		alloc::free(self.allocator, fn_nms);
-	}
-
-	foreach (param: params) {
-		fn_nms.add(param.copy(self.allocator));
-	}
-
-	Expr* body = self.parse_block(nullable::value(fn_nms))!;
+	Expr* body = self.parse_function_body(params)!;
 	return expr::@new(Function,
 		{ identifier, params, body },
 		self.stmt_span(start)

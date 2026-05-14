@@ -29,7 +29,8 @@ fn Expr*? Parser.expr_head(&self)
 			Expr* ident = self.parse_ident();
 			
 			if (self.nms.has(ident.primary.token.span.slice) ||
-				self.cursor.match(OPEN_PARENTHESIS, RAW)
+				self.cursor.match(OPEN_PARENTHESIS, RAW) ||
+				self.cursor.match(OPEN_BRACKET, RAW)
 			) return ident;
 
 			return self.parse_shell_call(ident);
@@ -38,6 +39,7 @@ fn Expr*? Parser.expr_head(&self)
 		case OPEN_PARENTHESIS: return self.parse_subexpr();
 		case OPEN_BRACKET: return self.parse_array();
 		case OPEN_BRACE: return self.parse_record();
+		case AMP: return self.parse_lambda();
 		default: {
 			//& prefix_op , expression
 			if(try op = op::check_prefix(tk.kind)) {
@@ -72,12 +74,12 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 		}
 	
 		//& "(" , [ argument_list ] , ")"
-		if (self.cursor.match(OPEN_PARENTHESIS)) {
+		if (self.cursor.match(OPEN_PARENTHESIS, KEEP_SEP)) {
 			expr = self.parse_call(expr)!;		
 			continue;
 		}
 		//& "[" , expression , "]"
-		if (self.cursor.match(OPEN_BRACKET)) {
+		if (self.cursor.match(OPEN_BRACKET, KEEP_SEP)) {
 			expr = self.parse_index(expr)!;
 			continue;
 		}
@@ -97,7 +99,7 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 		//& infix_op , expression
 		if (try op_def = op::check_infix(tk.kind, base_prec)) {
 			self.cursor.advance();
-			
+
 			Expr* rhs = self.parse_expression(op_def.prec)!;
 			expr = expr::@new(Infix,
 				{ expr, op_def.op, rhs },
@@ -169,8 +171,9 @@ fn Expr*? Parser.parse_record(&self)
         }
 		Expr* value = self.parse_expression()!;
         fields.push({ key, value });
-	
-		if (!self.cursor.follows(COMMA)) break;
+		
+		if (!self.cursor.follows(NEW_LINE)
+			&& !self.cursor.follows(COMMA)) break;
 	}
 
 	if (!self.cursor.follows(CLOSED_BRACE)) {
@@ -305,6 +308,7 @@ fn bool is_shell_call_terminator(TokenKind kind)
 	return is_line_terminator(kind) ||
 		kind == SPACE ||
 		kind == PIPE ||
+		kind == AMP ||
 		kind == CLOSED_BRACE ||
 		kind == CLOSED_PARENTHESIS ||
 		kind == EOF;
@@ -371,4 +375,29 @@ fn Expr*? Parser.parse_shell_arg(&self)
 	);
 }
 
+fn Expr*? Parser.parse_lambda(&self)
+{
+	Span start = self.cursor.advance_check(AMP).span;
 
+	if (!self.cursor.follows(OPEN_BRACE)) {
+		self.fill_diagnostic("expected '{'");
+		return ast::INVALID_EXPRESSION~;				
+	}
+
+	List{ String } params;
+	params.init(mem);
+
+	if (self.cursor.follows(PIPE) && !self.cursor.follows(PIPEX2)) {
+		self.parse_parameters(&params)!;
+		if (self.cursor.follows(PIPE)) {
+			self.fill_diagnostic("expected '|'");
+			return ast::INVALID_EXPRESSION~;	
+		}
+	}
+
+	Expr* body = self.parse_function_body(params)!;
+	return expr::@new(Lambda,
+		{ params, body },
+		self.stmt_span(start)
+	);
+}

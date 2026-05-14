@@ -20,9 +20,11 @@ enum Operator
 	MUL, DIV, MOD,
 	FLOOR_DIV, POW,
     DOT_ACCESS,
-    NOT,
+    POS, NEG, NOT,
 	EXEC_ASYNC,
-	ASIGNMENT,
+	ASGN,
+	ADD_ASGN, SUB_ASGN,
+	MUL_ASGN, DIV_ASGN
 }
 
 struct OperatorDef
@@ -34,8 +36,8 @@ struct OperatorDef
 /* Doesn't make sense to have it variate */
 const PREFIX_PREC = 15;
 const Operator[] PREFIX = {
-	[TokenKind.PLUS] = ADD,
-	[TokenKind.MINUS] = SUB,
+	[TokenKind.PLUS] = POS,
+	[TokenKind.MINUS] = NEG,
 	[TokenKind.EXCLAMATION] = NOT,
 };
 const OperatorDef[] POSTFIX = {
@@ -43,13 +45,18 @@ const OperatorDef[] POSTFIX = {
 	
 };
 const Pair{ OperatorDef, Associativity }[] INFIX = {
-	[TokenKind.STARX2] = {{ POW, 13 }, LEFT},
+	[TokenKind.STARX2] = {{ POW, 13 }, RIGHT},
 	[TokenKind.STAR] = {{ MUL, 12 }, LEFT},
 	[TokenKind.SLASH] = {{ DIV, 12 }, LEFT},
+	[TokenKind.SLASHX2] = {{ FLOOR_DIV, 12 }, LEFT},
 	[TokenKind.PERCENT] = {{ MOD, 12}, LEFT},
 	[TokenKind.PLUS] = {{ADD, 11}, LEFT},
 	[TokenKind.MINUS] = {{SUB, 11}, LEFT},
-	[TokenKind.EQ] = {{ASIGNMENT, 1}, RIGHT},
+	[TokenKind.EQ] = {{ASGN, 1}, RIGHT},
+	[TokenKind.PLUS_EQ] = {{ADD_ASGN, 1}, RIGHT},
+	[TokenKind.MINUS_EQ] = {{SUB_ASGN, 1}, RIGHT},
+	[TokenKind.STAR_EQ] = {{MUL_ASGN, 1}, RIGHT},
+	[TokenKind.SLASH_EQ] = {{DIV_ASGN, 1}, RIGHT},
 };
 
 fn Operator? check_prefix(TokenKind tk)
@@ -74,7 +81,7 @@ fn OperatorDef? check_infix(TokenKind tk, Precedence prec)
 	if (tk.ordinal >= INFIX.len) return NOT_ALLOWED~;
 	OperatorDef op_def = INFIX[tk].first;
 	Associativity as = INFIX[tk].second;
-	if (op_def.op != INVALID) return NOT_ALLOWED~;
+	if (op_def.op == INVALID) return NOT_ALLOWED~;
 	
 	bool is_higher = op_def.prec > prec;
 	bool is_right = as == Associativity.RIGHT;

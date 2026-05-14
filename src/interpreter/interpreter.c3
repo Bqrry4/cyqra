@@ -8,16 +8,47 @@ import std::os::process;
 import cyqra::lexer::token;
 import cyqra::parser::ast;
 import cyqra::diagnostic;
+
 import utils;
 
 faultdef
 		RUNTIME_ERROR,
-		UNSUPORTED_OP,
 		NOT_A_FUNCTION,
+		NOT_ASSIGNMENT,
 		INVALID_ARGS_COUNT,
 		IDENTIFIER_NOT_FOUND,
 		//! Temporary solution for the return from functions using faults
 		RETURN_STATEMENT;
+
+enum ValKind {
+	VAL,
+	REF
+}
+
+struct EValue {
+	ValKind kind;
+	union {
+		Value v;
+		Value* ref;
+	}
+}
+
+macro EValue val(Value value) => {
+	.kind = VAL,
+	.v = value
+};
+
+macro EValue ref(Value* ref) => {
+	.kind = REF,
+	.ref = ref
+};
+
+fn Value EValue.get(&self) {
+	if (self.kind == REF) {
+		return *self.ref;
+	}
+	return self.v;
+} 
 
 struct Interpreter
 {
@@ -51,26 +82,26 @@ fn void Interpreter.free(&self)
 
 fn void Interpreter.interpret(&self, Ast ast)
 {
-	Value last = value::UNIT;
+	EValue last = val(value::UNIT);
 	foreach (expr: ast.expressions) {
 		if (catch err = @try(last, self.eval(expr))) {
 			io::printn(self.diagnostic);
 		}
 	}
-	if (last.kind != UNIT) {
-		String s_val = last.to_string(self.allocator);
+	if (last.get().kind != UNIT) {
+		String s_val = last.get().to_string(self.allocator);
 		io::printn(s_val);
 		s_val.free(self.allocator);
 	}
 }
 
-fn Value? Interpreter.eval(&self, Expr* expr)
+fn EValue? Interpreter.eval(&self, Expr* expr)
 {
 	switch (expr.kind) {
 		case PRIMARY: return self.eval_primary(expr);
 		case STRINGLIT: return self.eval_string(expr);
-		// case PREFIX: expr.prefix.eval();
-		// case POSTFIX: expr.postfix.eval();
+		// case PREFIX: return self.eval_prefix(expr);
+		// case POSTFIX: return self.eval_postfix(expr);
 		case INFIX: return self.eval_infix(expr);
 		case CALL: return self.eval_call(expr);
 		case INDEX: return self.eval_index(expr);
@@ -82,32 +113,32 @@ fn Value? Interpreter.eval(&self, Expr* expr)
 		case RECORD: return self.eval_record(expr);
 		default: io::printn("not implemented");
 	}
-	return value::UNIT;
+	return val(value::UNIT);
 }
 
-fn Value? Interpreter.eval_primary(&self, Expr* expr)
+fn EValue? Interpreter.eval_primary(&self, Expr* expr)
 {
 	Primary* p = &expr.primary;
 
 	String slice = p.token.span.slice;
 	TokenKind kind = p.token.kind;
 	switch (kind) {
-		case INTEGER: return value::_int(slice.to_long()!!);
-		case FLOAT: return value::_float(slice.to_double()!!);
+		case INTEGER: return val(value::_int(slice.to_long()!!));
+		case FLOAT: return val(value::_float(slice.to_double()!!));
 		case IDENTIFIER: {
-			Value? val = self.scope.get(slice);
+			Value*? val = self.scope.get_ref(slice);
 			if (catch val) {
 				self.identifier = slice;
 				return IDENTIFIER_NOT_FOUND~;
 			}
-			return val;
+			return ref(val);
 		}
 		
 		default: unreachable("eval_primary: unexpected token kind '%s'", kind);
 	}
 }
 
-fn Value? Interpreter.eval_string(&self, Expr* expr)
+fn EValue? Interpreter.eval_string(&self, Expr* expr)
 {
 	StringLit* s = &expr.string;
 	DString dstring = (DString){}.init(self.allocator);
@@ -117,7 +148,7 @@ fn Value? Interpreter.eval_string(&self, Expr* expr)
 			case TEXT:
 				dstring.append(part.text);
 			case INTERP:
-				Value val = self.eval(part.interp)!;
+				Value val = self.eval(part.interp)!.get();
 				dstring.append(val.to_string(self.allocator));			
 		}
 	}
@@ -125,81 +156,63 @@ fn Value? Interpreter.eval_string(&self, Expr* expr)
 	String result = dstring.copy_str(self.allocator);
 	dstring.free();
 	
-	return {
+	return val({
 		.kind = STRING,
 		._string = result
-	};
+	});
 }
 
-fn Value? Interpreter.eval_infix(&self, Expr* expr)
+fn EValue? Interpreter.eval_infix(&self, Expr* expr)
 {
-	Infix* ifx = &expr.infix;
-		
-	Value lhs = self.eval(ifx.lhs)!;
-	Value rhs = self.eval(ifx.rhs)!;
+    Infix* ifx = &expr.infix;
 
-	if (lhs.kind != rhs.kind) {
-		value::coerce(lhs, rhs)!.unpack(&lhs, &rhs);
-	}
+    EValue lhs = self.eval(ifx.lhs)!;
+    EValue rhs = self.eval(ifx.rhs)!;
 
-	switch (ifx.op) {
-		case ADD: switch (lhs.kind) {
-			case INT:
-				return value::_int(lhs._int + rhs._int);
-			case FLOAT:
-				return value::_float(lhs._float + rhs._float);
-			default: return UNSUPORTED_OP~;
-		}
-		case SUB: switch(lhs.kind) {
-			case INT:
-				return value::_int(lhs._int - rhs._int);
-			case FLOAT:
-				return value::_float(lhs._float - rhs._float);
-			default: return UNSUPORTED_OP~;
-		}
-		case MUL: switch(lhs.kind) {
-			case INT:
-				return value::_int(lhs._int * rhs._int);
-			case FLOAT:
-				return value::_float(lhs._float * rhs._float);
-			default: return UNSUPORTED_OP~;
-		}
-		case POW: switch(lhs.kind) {
-			case INT:
-				return value::_float(math::pow((int)lhs._int, (int)rhs._int));
-			case FLOAT:
-				return value::_float(math::pow(lhs._float, rhs._float));
-			default: return UNSUPORTED_OP~;
-		}
-		case DIV: switch(lhs.kind) {
-			case INT:
-				return value::_float(lhs.as_float()._float / rhs._int);
-			case FLOAT:
-				return value::_float(lhs._float / rhs._float);
-			default: return UNSUPORTED_OP~;
-		}
-		case FLOOR_DIV: switch(lhs.kind) {
-			case INT:
-				return value::_int(lhs._int / rhs._int);
-			case FLOAT:
-				return value::_float(lhs._float - rhs._float);
-			default: return UNSUPORTED_OP~;
-		}
-		case MOD: switch(lhs.kind) {
-			case INT:
-				return value::_int(lhs._int % rhs._int);
-			case FLOAT:
-				return value::_float(lhs._float - math::floor(lhs._float / rhs._float) * rhs._float);
-			default: return UNSUPORTED_OP~;
-		}
-		default: unreachable("Unreacahble reached in infix eval");	
-	}
+    if(try val = self.eval_assign(ifx, lhs, rhs)) return val;
+
+    return val(value::apply_op(ifx.op, lhs.get(), rhs.get()));
 }
 
-fn Value? Interpreter.eval_binding(&self, Expr* expr)
+fn EValue? Interpreter.eval_assign(&self, Infix* ifx, EValue lhs, EValue rhs)
+{
+	if (lhs.kind != REF) {
+		self.diagnostic.error(ifx.lhs.span, "the lhs is not assignable");
+		return RUNTIME_ERROR~;
+	}
+	Value rhs_v = rhs.get();
+	Value lhs_v = lhs.get();
+	switch (ifx.op) {
+        case ADD_ASGN:
+			rhs_v = value::apply_op(ADD, lhs_v, rhs_v)!;
+			nextcase ASGN;
+		case SUB_ASGN:
+			rhs_v = value::apply_op(SUB, lhs_v, rhs_v)!;
+        case MUL_ASGN:
+			rhs_v = value::apply_op(MUL, lhs_v, rhs_v)!;
+		case DIV_ASGN:
+			rhs_v = value::apply_op(DIV, lhs_v, rhs_v)!;
+        case ASGN:
+			*(lhs.ref) = rhs_v;
+		default: return NOT_ASSIGNMENT~;
+	}
+	return val(value::UNIT);
+}
+fn EValue? Interpreter.eval_prefix(&self, Expr* expr)
+{
+    Prefix* pfx = &expr.prefix;
+	Value rhs = self.eval(pfx.rhs)!.get();
+    switch (pfx.op) {
+        case POS: return val(value::pos(rhs));
+        case NEG: return val(value::neg(rhs));
+        case NOT: return val(value::not(rhs));
+        default: unreachable("unhandled prefix op");
+    }
+}
+fn EValue? Interpreter.eval_binding(&self, Expr* expr)
 {
 	Binding* bnd = &expr.binding;
-	Value value = self.eval(bnd.value)!;
+	Value value = self.eval(bnd.value)!.get();
 
 	switch (bnd.type) {
 		case LET:
@@ -209,10 +222,10 @@ fn Value? Interpreter.eval_binding(&self, Expr* expr)
 		case ENV:	// os::set_var();
 		default: unreachable("Not a binding keyword");			
 	}
-	return value::UNIT;
+	return val(value::UNIT);
 }
 
-fn Value? Interpreter.eval_block(&self, Block* expr, Nullable{ Scope* } scope = nullable::NULL)
+fn EValue? Interpreter.eval_block(&self, Block* expr, Nullable{ Scope* } scope = nullable::NULL)
 {
 	// Block* blk = &expr.block;
 	
@@ -236,13 +249,13 @@ fn Value? Interpreter.eval_block(&self, Block* expr, Nullable{ Scope* } scope = 
 	
 	Value last = value::UNIT;
 	foreach (stmt: expr.stmts) {
-		last = self.eval(stmt)!;
+		last = self.eval(stmt)!.get();
 	}
 
-	return last;	
+	return val(last);	
 }
 
-fn Value? Interpreter.eval_fn(&self, Expr* expr)
+fn EValue? Interpreter.eval_fn(&self, Expr* expr)
 {
 	Function* fun = &expr.fun;
 	self.scope.set(fun.identifier.span.slice, {
@@ -252,16 +265,16 @@ fn Value? Interpreter.eval_fn(&self, Expr* expr)
 			.body = &fun.body.block
 		}
 	});
-	return value::UNIT;
+	return val(value::UNIT);
 } 
 
 
-fn Value? Interpreter.eval_call(&self, Expr* expr)
+fn EValue? Interpreter.eval_call(&self, Expr* expr)
 {
 	Call* call = &expr.call;
 	Value callee; 
     fault err = @catch(
-		@try(callee, self.eval(call.callee))
+		@try(callee, self.eval(call.callee).get())
 	);
 
     if (err && err != IDENTIFIER_NOT_FOUND) return err~;
@@ -272,17 +285,17 @@ fn Value? Interpreter.eval_call(&self, Expr* expr)
 	//@ Add dummy value for the external call
 	args.push(value::UNIT);
 	foreach (arg_expr: call.args) {
-		args.push(self.eval(arg_expr)!);
+		args.push(self.eval(arg_expr)!.get());
 	}
 
     if (err == IDENTIFIER_NOT_FOUND) {
 		args[0] = value::_string(self.identifier);
-		Value? ret = self.call_external(args.array_view());
+		Value? ret = self.call_external(args.array_view()).get();
 		if (catch err2 = ret) {
 			self.diagnostic.error(call.callee.span, "command not found");
 			return RUNTIME_ERROR~;
 		}
-		return ret;
+		return val(ret);
 	}
 	
 	if (!callee.is_fn()) return NOT_A_FUNCTION~;
@@ -290,7 +303,7 @@ fn Value? Interpreter.eval_call(&self, Expr* expr)
 }
 
 
-fn Value? Interpreter.call_fn(&self, Fn _fn, Value[] args)
+fn EValue? Interpreter.call_fn(&self, Fn _fn, Value[] args)
 {	
 	Scope* fn_scope = scope::new_ref(self.allocator, nullable::value(self.scope));
 	defer fn_scope.free();
@@ -302,15 +315,15 @@ fn Value? Interpreter.call_fn(&self, Fn _fn, Value[] args)
 		fn_scope.set(_fn.params[i], arg);
 	}
 	Value returned = value::UNIT;
-	if (catch err = @try(returned, self.eval_block(_fn.body, nullable::value(fn_scope)))) {
+	if (catch err = @try(returned, self.eval_block(_fn.body, nullable::value(fn_scope)).get())) {
 		if (err == RETURN_STATEMENT) {
-			return self.return_value;
+			return val(self.return_value);
 		}
 	}
-	return returned;
+	return val(returned);
 }
 
-fn Value? Interpreter.call_external(&self, Value[] cmd_args)
+fn EValue? Interpreter.call_external(&self, Value[] cmd_args)
 {
 	String[] cmd_line = alloc::new_array(self.allocator, String, cmd_args.len);
 	defer alloc::free(self.allocator, cmd_line);
@@ -331,33 +344,33 @@ fn Value? Interpreter.call_external(&self, Value[] cmd_args)
 		}
 	}
 
-	return value::UNIT;
+	return val(value::UNIT);
 }
 
-fn Value? Interpreter.eval_return(&self, Expr* expr)
+fn EValue? Interpreter.eval_return(&self, Expr* expr)
 {
 	Return* ret = &expr.ret;
 	self.return_value = value::UNIT;
 	if(!ret.value.is_null()) {
-		self.return_value = self.eval(ret.value.ptr)!;
+		self.return_value = self.eval(ret.value.ptr)!.get();
 	}
 	return RETURN_STATEMENT~;
 }
 
-fn Value? Interpreter.eval_array(&self, Expr* expr)
+fn EValue? Interpreter.eval_array(&self, Expr* expr)
 {
 	Array* arr = &expr.array;
 
 	List{ Value } values; values.init(self.allocator);
-	foreach (expr_val : arr.init_values) {
-		values.push(self.eval(expr_val)!);
+	foreach (expr_val : arr.elements) {
+		values.push(self.eval(expr_val)!.get());
 	}
-	return {
+	return val({
 		.kind = ARRAY,
 		._array = { values }
-	};
+	});
 }
-fn Value? Interpreter.eval_record(&self, Expr* expr)
+fn EValue? Interpreter.eval_record(&self, Expr* expr)
 {
 	Record* rec = &expr.record;
 	HashMap{ String, Value } values; values.init(self.allocator);
@@ -368,22 +381,22 @@ fn Value? Interpreter.eval_record(&self, Expr* expr)
 		if (field.key.primary.token.kind == IDENTIFIER) {
 			key = field.key.primary.token.span.slice.copy(self.allocator);
 		} else {
-			key = self.eval(field.key).to_string(self.allocator)!;
+			key = self.eval(field.key).get().to_string(self.allocator)!;
 		}
-		Value value = self.eval(field.value)!;
+		Value value = self.eval(field.value)!.get();
 		values.set(key, value);
 	}
-	return {
+	return val({
 		.kind = RECORD,
 		._record = { values }
-	};
+	});
 }
 
-fn Value? Interpreter.eval_index(&self, Expr* expr)
+fn EValue? Interpreter.eval_index(&self, Expr* expr)
 {
 	Index* idx = &expr.index;
-	Value index_v = self.eval(idx.index)!;
-	Value object = self.eval(idx.object)!;
+	Value index_v = self.eval(idx.index)!.get();
+	Value object = self.eval(idx.object)!.get();
 	switch (object.kind) {
 		case ARRAY: {
 			if (index_v.kind != INT) {
@@ -396,7 +409,7 @@ fn Value? Interpreter.eval_index(&self, Expr* expr)
 				self.diagnostic.error(idx.index.span, "index out of bounds");
 				return RUNTIME_ERROR~;
 			}
-			return object._array.values[index];
+			return ref(&object._array.values[index]);
 		}
 		case RECORD: {
 			if (index_v.kind != STRING) {
@@ -409,7 +422,7 @@ fn Value? Interpreter.eval_index(&self, Expr* expr)
 				return RUNTIME_ERROR~;
 			}
 
-			return object._record.values[index];
+			return ref(&object._record.values[index]);
 		}
 		default: {
 			self.diagnostic.error(idx.object.span, "value isn't indexable");

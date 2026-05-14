@@ -55,7 +55,8 @@ enum ExprKind
 	FUNCTION,
 	RETURN,
 	ARRAY,
-	RECORD
+	RECORD,
+	LAMBDA
 }
 
 struct Primary
@@ -110,7 +111,7 @@ struct Return
 }
 struct Array
 {
-	List{ Expr* } init_values;
+	List{ Expr* } elements;
 }
 
 struct RecordField
@@ -138,10 +139,15 @@ struct StringPart
         Expr* interp;
     }
 }
-
 struct StringLit
 {
 	List{ StringPart } parts;
+}
+
+struct Lambda
+{
+	List{ String } params;
+	Expr* body;
 }
 
 struct Expr
@@ -160,6 +166,7 @@ struct Expr
 		Return ret;
 		Array array;
 		Record record;
+		Lambda lambda;
 	}
 	Span span;
 	ExprKind kind;
