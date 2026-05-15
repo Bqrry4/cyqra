@@ -85,6 +85,7 @@ fn void Interpreter.interpret(&self, Ast ast)
 	EValue last = val(value::UNIT);
 	foreach (expr: ast.expressions) {
 		if (catch err = @try(last, self.eval(expr))) {
+			io::printn(err);
 			io::printn(self.diagnostic);
 		}
 	}
@@ -166,11 +167,26 @@ fn EValue? Interpreter.eval_infix(&self, Expr* expr)
 {
     Infix* ifx = &expr.infix;
 
+	// TODO: find a cleaner solution
+	if (ifx.op == DOT_ACCESS) {
+ 		Value lhs = self.eval(ifx.lhs)!.get();
+		if (lhs.kind != RECORD) {
+			self.diagnostic.error(ifx.lhs.span, "value must be a RECORD");
+			return RUNTIME_ERROR~;
+		}
+		String index = ifx.rhs.span.slice;
+		if (!lhs._record.values.has_key(index)) {
+			self.diagnostic.error(ifx.rhs.span, "cannot find field");
+			return RUNTIME_ERROR~;
+		}
+		return ref(&lhs._record.values[index]);
+	}
+
     EValue lhs = self.eval(ifx.lhs)!;
     EValue rhs = self.eval(ifx.rhs)!;
 
-    if(try val = self.eval_assign(ifx, lhs, rhs)) return val;
-
+    if (try val = self.eval_assign(ifx, lhs, rhs)) return val;
+	
     return val(value::apply_op(ifx.op, lhs.get(), rhs.get()));
 }
 
@@ -335,7 +351,7 @@ fn EValue? Interpreter.call_external(&self, Value[] cmd_args)
 		arg.free(self.allocator);
 	}
 	
-	if (catch err = process::run(cmd_line, INHERIT_STDIO)) {
+	if (catch err = process::run(cmd_line, INHERIT_STDIO | INHERIT_ENV )) {
 		//! It could fail from many reasons,
 		// but assume Cmd not found,
 		// as stdlib doesnt expose reasons yet

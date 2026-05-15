@@ -22,6 +22,7 @@ enum Operator
     DOT_ACCESS,
     POS, NEG, NOT,
 	EXEC_ASYNC,
+	PIPE, PIPE_ERR, PIPE_ALL,
 	ASGN,
 	ADD_ASGN, SUB_ASGN,
 	MUL_ASGN, DIV_ASGN
@@ -52,6 +53,11 @@ const Pair{ OperatorDef, Associativity }[] INFIX = {
 	[TokenKind.PERCENT] = {{ MOD, 12}, LEFT},
 	[TokenKind.PLUS] = {{ADD, 11}, LEFT},
 	[TokenKind.MINUS] = {{SUB, 11}, LEFT},
+
+	[TokenKind.PIPE] = {{PIPE, 3}, LEFT},
+	[TokenKind.EXCL_PIPE] = {{PIPE_ERR, 3}, LEFT},
+	[TokenKind.PIPE_AMP] = {{PIPE_ALL, 3}, LEFT},
+
 	[TokenKind.EQ] = {{ASGN, 1}, RIGHT},
 	[TokenKind.PLUS_EQ] = {{ADD_ASGN, 1}, RIGHT},
 	[TokenKind.MINUS_EQ] = {{SUB_ASGN, 1}, RIGHT},

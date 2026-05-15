@@ -124,27 +124,28 @@ fn void? Lexer.next_token(&self)
 fn void? Lexer.lex_code(&self, char c)
 {
      switch(c) {
-          case '+': self.cursor.follows('+') ? self.emit(PLUS_PLUS)
-                    : self.cursor.follows('=') ? self.emit(PLUS_ASGN)
+          case '+' : self.cursor.follows('=') ? self.emit(PLUS_EQ)
                                              : self.emit(PLUS);
-          case '-': self.cursor.follows('-') ? self.emit(MINUS_MINUS)
-                    : self.cursor.follows('=') ? self.emit(MINUS_ASGN)
+          case '-' : self.cursor.follows('=') ? self.emit(MINUS_EQ)
                                         : self.emit(MINUS);
-          case '*': self.cursor.follows('*') ? self.emit(STAR_STAR)
-                    : self.cursor.follows('=') ? self.emit(STAR_ASGN)
+          case '*': self.cursor.follows('*') ? self.emit(STARX2)
+                    : self.cursor.follows('=') ? self.emit(STAR_EQ)
                                         : self.emit(STAR);
-          case '/': self.cursor.follows('=') ? self.emit(SLASH_ASGN)
+          case '/': self.cursor.follows('/') ? self.emit(SLASHX2)
+                    : self.cursor.follows('=') ? self.emit(SLASH_EQ)
                                       : self.emit(SLASH);
           case '%': self.emit(PERCENT);
-          case '|': self.cursor.follows('@') ? self.emit(PIPE_ALL)
+          case '|': self.cursor.follows('&') ? self.emit(PIPE_AMP)
                                       : self.emit(PIPE);
+          case '&': self.emit(AMP);
           case '<': self.cursor.follows('=') ? self.emit(LTE)
                                       : self.emit(LT);
           case '>': self.cursor.follows('=') ? self.emit(GTE)
                                       : self.emit(GT);
-          case '=': self.cursor.follows('=') ? self.emit(ASGN)
+          case '=': self.cursor.follows('=') ? self.emit(EQX2)
                                       : self.emit(EQ);
-          case '!': self.cursor.follows('=') ? self.emit(NEQ)
+          case '!': self.cursor.follows('|') ? self.emit(EXCL_PIPE)
+                    : self.cursor.follows('=') ? self.emit(NEQ)
                                       : self.emit(EXCLAMATION);
           case '(': self.emit(OPEN_PARENTHESIS);
           case ')': self.emit(CLOSED_PARENTHESIS);
@@ -171,6 +172,7 @@ fn void? Lexer.lex_code(&self, char c)
 
                self.ctx().interp.brace_depth--;
           }
+          case ':': self.emit(COLON);
           case ';': self.emit(SEMICOLON);
           case ',': self.emit(COMMA);
           case '.': self.cursor.follows('.') ?

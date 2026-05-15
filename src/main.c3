@@ -11,16 +11,20 @@ import cyqra::readline::reader;
 fn void interactive() => @pool()
 {
     Lexer lexer = lexer::new(tmem);
-    Parser parser = parser::new(tmem, {.src_name = "repl"});
-    Interpreter interpreter = interpreter::new(tmem);
+    Diagnostic diag = {
+        .src_name = "repl"
+    };
+    Parser parser = parser::new(tmem, &diag);
+    Interpreter interpreter = interpreter::new(tmem, &diag);
     Reader reader = reader::new(tmem);
     while (true) {
         String line = reader.read_line();
         //! TODO: implement proper render in the ^reader
         io::printf("\r\n");
         List{Token} tokens = lexer.analyze(line);
-
-        parser.parse(tokens);     
+    
+        diag.source = line;
+        parser.parse(tokens);
         interpreter.interpret(parser.ast);
    }
 }
@@ -31,10 +35,14 @@ fn void from_file(String file_name, String content)
     Lexer lexer = lexer::new(tmem);
     List{Token} tokens = lexer.analyze(content);
 
-    Parser parser = parser::new(tmem, {.src_name = file_name});
+    Diagnostic diag = {
+        .src_name = file_name,
+        .source = content
+    };
+    Parser parser = parser::new(tmem, &diag);
     parser.parse(tokens);
-   
-    Interpreter interpreter = interpreter::new(tmem);
+
+    Interpreter interpreter = interpreter::new(tmem, &diag);
     interpreter.interpret(parser.ast);
 }
 

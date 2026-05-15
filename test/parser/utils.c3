@@ -97,3 +97,8 @@ macro Index* unwrap_index(Expr* expr)
     assert(expr.kind == INDEX);
     return &expr.index;
 }
+macro Pipeline* unwrap_pipeline(Expr* expr)
+{
+    assert(expr.kind == PIPELINE);
+    return &expr.pipeline;
+}

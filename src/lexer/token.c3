@@ -6,21 +6,18 @@ enum TokenKind : int @public
     /* Operators */
 	PLUS, MINUS,
 	EXCLAMATION,
-	PLUS_PLUS, MINUS_MINUS,
-    STAR, STAR_STAR,
-    SLASH, SLASH_SLASH, PERCENT,
-	SHL, SHR,
+    STAR, STARX2,
+    SLASH, SLASHX2, PERCENT,
 	LT, LTE, GT, GTE,
-	EQ, NEQ,
-	AND, OR,
-	AMPERSAND,
-    PIPE, PIPE_ALL,
-    DOT, DOTX2, DOTX3,
+	EQ, NEQ, EQX2,
+	PLUS_EQ, MINUS_EQ,
+    STAR_EQ, SLASH_EQ,
+	AMP, AMPX2,
+	PIPE, EXCL_PIPE,
+	PIPE_AMP, PIPEX2,
+	DOT, DOTX2, DOTX3,
 
-    ASGN,
-    PLUS_ASGN, MINUS_ASGN,
-    STAR_ASGN, SLASH_ASGN,
-     
+         
     /* Brackets */
     OPEN_PARENTHESIS, CLOSED_PARENTHESIS,
     OPEN_BRACE, CLOSED_BRACE,
@@ -30,7 +27,7 @@ enum TokenKind : int @public
     INTEGER, FLOAT,
 
     IDENTIFIER,
-    SEMICOLON, COMMA,
+    COLON, SEMICOLON, COMMA,
     NEW_LINE, SPACE,
 
     /* keywords */

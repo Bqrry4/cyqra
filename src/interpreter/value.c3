@@ -4,6 +4,7 @@ import std::collections::pair;
 import std::collections::list;
 import std::collections::map;
 import std::math;
+import std::os;
 
 import cyqra::parser::op;
 import cyqra::parser::ast;
@@ -18,7 +19,8 @@ enum ValueKind
 	STRING,
 	FUNCTION,
 	ARRAY,
-	RECORD
+	RECORD,
+	STREAM
 }
 
 struct Fn
@@ -26,16 +28,19 @@ struct Fn
 	List{ String } params;
 	Block* body;
 }
-
 struct Array_v
 {
 	List{ Value } values;
 }
-
 struct Record_v
 {
 	HashMap{ String, Value } values;
 }
+struct Stream
+{
+	Process proc;
+}
+
 struct Value
 {
 	ValueKind kind;
@@ -46,6 +51,7 @@ struct Value
 		Fn _fn;
 		Array_v _array;
 		Record_v _record;
+		Stream _stream;
 	}
 }
 
@@ -146,6 +152,7 @@ fn String Value.to_string(&self, Allocator allocator)
 
 			return str.copy_str(allocator);
 		}
+		default: return "";
 	}
 }
 

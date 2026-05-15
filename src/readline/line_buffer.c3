@@ -4,8 +4,8 @@ import std::io;
 struct LineBuffer
 {
 	DString prompt;
-	usz internal_cursor;
-	usz visual_cursor;
+	sz internal_cursor;
+	sz visual_cursor;
 }
 
 fn LineBuffer new(Allocator allocator) => {
@@ -27,7 +27,7 @@ fn void LineBuffer.reset(&self)
 
 macro sz LineBuffer.closest_codepoint(&self, $direction)
 {
-	usz cursor = self.internal_cursor;
+	sz cursor = self.internal_cursor;
 	$switch $direction:
 		$case "right":
 			if (cursor >= self.prompt.len()) return 0;
@@ -43,7 +43,7 @@ macro sz LineBuffer.closest_codepoint(&self, $direction)
 				if (cursor == 0) return 0;
 				cursor--;
 			} while ((self.prompt[cursor] & 0xC0) == 0x80);
-			return (sz)cursor - self.internal_cursor;
+			return cursor - self.internal_cursor;
 		$endswitch	
 }
 

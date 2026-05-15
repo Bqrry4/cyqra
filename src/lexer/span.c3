@@ -24,7 +24,7 @@ fn Span backtrack(String source, Span span, uint n)
 	char* current = span.slice;
 	uint lines = (uint)min(n, span.row);
 
-	int remaining = lines;
+	int remaining = (int)lines;
 	while (current > source.ptr) {
 		--current;
 		if (*current != '\n') continue;

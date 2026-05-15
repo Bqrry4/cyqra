@@ -17,7 +17,7 @@ enum CursorMode
 struct Cursor
 {
 	List{ Token } tokens;
-	usz current;
+	sz current;
 }
 
 fn void Cursor.reset(&self)
@@ -54,9 +54,14 @@ fn Token Cursor.advance(&self)
 	return (self.tokens[self.current++]);
 }
 
-macro Token Cursor.advance_check(&self, TokenKind expect)
+macro Token Cursor.advance_check(&self, TokenKind ...expect)
 {
-	assert(self.peek(RAW).kind == expect);
+	TokenKind tk = self.peek(RAW).kind;
+	bool matches = false;
+	foreach (exp: expect) {
+		matches = matches || (tk == exp);
+	}
+	assert(matches);
 	return self.advance();
 }
 

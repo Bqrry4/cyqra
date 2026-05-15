@@ -39,8 +39,6 @@ import cyqra::parser::op;
 import std::io;
 import std::collections::list;
 
-
-
 enum ExprKind
 {
 	PRIMARY,
@@ -56,7 +54,8 @@ enum ExprKind
 	RETURN,
 	ARRAY,
 	RECORD,
-	LAMBDA
+	LAMBDA,
+	PIPELINE
 }
 
 struct Primary
@@ -149,7 +148,21 @@ struct Lambda
 	List{ String } params;
 	Expr* body;
 }
-
+enum PipeMode {
+    OUT,
+    ERR,
+	OUT_ERR,
+}
+struct PipelineLink
+{
+	Expr* expr;
+	PipeMode mode;
+}
+struct Pipeline
+{
+	Expr* head;
+	List{ PipelineLink } links; 
+}
 struct Expr
 {
 	struct {
@@ -167,6 +180,7 @@ struct Expr
 		Array array;
 		Record record;
 		Lambda lambda;
+		Pipeline pipeline;
 	}
 	Span span;
 	ExprKind kind;

@@ -1,4 +1,5 @@
 module cyqra::parser @test;
+import std::io;
 
 // --- arithmetic ---
 fn void parse_infix_add()
@@ -226,4 +227,84 @@ fn void parse_grouping_nested()
     Infix* mul = unwrap_infix(add.rhs, ADD);
     assert_token(unwrap_primary(mul.lhs), "2");
     assert_token(unwrap_primary(mul.rhs), "3");
+}
+
+// --- pipelines ---
+fn void parse_pipeline()
+{
+    Ast ast = parse(`
+        a | b | c
+    `);
+    Pipeline* ppln = unwrap_pipeline(unwrap_nth(ast.expressions, 0));
+
+    assert_token(unwrap_primary(unwrap_call(ppln.head).callee), "a");
+    assert(ppln.links.len() == 2);
+
+    assert_token(unwrap_primary(unwrap_call(ppln.links[0].expr).callee), "b");
+    assert(ppln.links[0].mode == OUT);
+
+    assert_token(unwrap_primary(unwrap_call(ppln.links[1].expr).callee), "c");
+    assert(ppln.links[1].mode == OUT);
+}
+
+
+fn void parse_pipeline_mixed()
+{
+    Ast ast = parse(`
+        a | b |& c !| d
+    `);
+    Pipeline* ppln = unwrap_pipeline(unwrap_nth(ast.expressions, 0));
+
+    assert_token(unwrap_primary(unwrap_call(ppln.head).callee), "a");
+    io::printn(ppln.links.len());
+    assert(ppln.links.len() == 3);
+
+    assert_token(unwrap_primary(unwrap_call(ppln.links[0].expr).callee), "b");
+    assert(ppln.links[0].mode == OUT);
+
+    assert_token(unwrap_primary(unwrap_call(ppln.links[1].expr).callee), "c");
+    assert(ppln.links[1].mode == OUT_ERR);
+
+    assert_token(unwrap_primary(unwrap_call(ppln.links[2].expr).callee), "d");
+    assert(ppln.links[2].mode == ERR);
+}
+
+fn void parse_pipeline_with_args()
+{
+    Ast ast = parse(`echo hello | grep he`);
+    Pipeline* ppln = unwrap_pipeline(unwrap_nth(ast.expressions, 0));
+
+    Call* echo = unwrap_call(ppln.head);
+    assert_token(unwrap_primary(echo.callee), "echo");
+	StringPart* echo_arg = unwrap_nth_str_part(
+        unwrap_string(unwrap_nth(echo.args, 0)),
+        0, TEXT
+    );
+    assert(echo_arg.text == "hello");
+
+    assert(ppln.links.len() == 1);
+    Call* grep = unwrap_call(ppln.links[0].expr);
+    assert_token(unwrap_primary(grep.callee), "grep");
+    assert(ppln.links[0].mode == OUT);
+
+    StringPart* grep_arg = unwrap_nth_str_part(
+        unwrap_string(unwrap_nth(grep.args, 0)),
+        0, TEXT
+    );
+    assert(grep_arg.text == "he");
+}
+
+fn void parse_pipeline_with_expressions()
+{
+    Ast ast = parse(`1 + 2 | foo`);
+    Pipeline* ppln = unwrap_pipeline(unwrap_nth(ast.expressions, 0));
+
+    assert(ppln.links.len() == 1);
+    Infix* add = unwrap_infix(ppln.head, ADD);    
+    assert_token(unwrap_primary(add.lhs), "1");
+    assert_token(unwrap_primary(add.rhs), "2");
+
+    Call* grep = unwrap_call(ppln.links[0].expr);
+    assert_token(unwrap_primary(grep.callee), "foo");
+    assert(ppln.links[0].mode == OUT);
 }

@@ -83,6 +83,11 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 			expr = self.parse_index(expr)!;
 			continue;
 		}
+		//& "." , identifier
+		if (self.cursor.match(DOT, KEEP_SEP)) {
+			expr = self.parse_dot_access(expr)!;
+    		continue;
+		}
 		
 		Token tk = self.cursor.peek(KEEP_SEP);
 		//& postfix_op
@@ -95,17 +100,25 @@ fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
 			);
 			continue;	
 		}
-		
+
 		//& infix_op , expression
 		if (try op_def = op::check_infix(tk.kind, base_prec)) {
 			self.cursor.advance();
 
-			Expr* rhs = self.parse_expression(op_def.prec)!;
-			expr = expr::@new(Infix,
-				{ expr, op_def.op, rhs },
-				self.stmt_span(start)
-			);
-			continue;
+			switch (op_def.op) {
+				case PIPE: case PIPE_ERR: case PIPE_ALL: {
+					expr = self.parse_pipe(expr, op_def)!;
+					continue;
+				}
+				default: {
+					Expr* rhs = self.parse_expression(op_def.prec)!;
+					expr = expr::@new(Infix,
+						{ expr, op_def.op, rhs },
+						self.stmt_span(start)
+					);
+					continue;	
+				}
+			}
 		}
 		break;
 	}
@@ -290,6 +303,59 @@ fn Expr*? Parser.parse_index(&self, Expr* indexed)
 	);
 }
 
+fn Expr*? Parser.parse_pipe(&self, Expr* left, OperatorDef op_def)
+{
+	Expr* right = self.parse_expression(op_def.prec)!;
+
+	PipeMode mode; switch(op_def.op) {
+		case PIPE: mode = OUT;
+		case PIPE_ERR: mode = ERR;
+		case PIPE_ALL: mode = OUT_ERR;
+		default: unreachable("Provided operator is not a PIPE");
+	}
+
+	if (left.kind == PIPELINE) {
+		left.pipeline.links.push({ right, mode });
+		left.span = left.span.extend(right.span);
+		return left;
+	}
+	
+	List{ PipelineLink } links; links.init(mem);
+	links.push({ right, mode });
+
+	return expr::@new(Pipeline,
+		{ left, links },
+		self.stmt_span(left.span.extend(right.span))
+	);
+}
+
+fn Expr*? Parser.parse_dot_access(&self, Expr* accessed)
+{
+	Span start = self.cursor.advance_check(DOT).span;
+
+	Token field = self.cursor.advance();
+
+	if (field.kind != IDENTIFIER) {
+    	self.fill_diagnostic("expected field name after '.'");
+    	return ast::INVALID_EXPRESSION~;
+    }
+    Expr* rhs = expr::@new(Primary,
+     	{ .token = field },
+    	self.stmt_span(field.span)
+    );
+	
+   	return expr::@new(Infix,
+    	{ accessed, DOT_ACCESS, rhs },
+    	self.stmt_span(start)
+    );
+
+	// return expr::@new(Index,
+	// 	{ accessed, rhs },
+	// 	self.stmt_span(start)
+	// );
+
+}
+
 fn Expr* Parser.parse_ident(&self)
 {
 	Token ident = self.cursor.advance_check(IDENTIFIER);
@@ -306,9 +372,11 @@ fn Expr* Parser.parse_ident(&self)
 fn bool is_shell_call_terminator(TokenKind kind)
 {
 	return is_line_terminator(kind) ||
-		kind == SPACE ||
+		kind == SPACE || // Used for arg terminator
 		kind == PIPE ||
 		kind == AMP ||
+		kind == PIPE_AMP ||
+		kind == EXCL_PIPE ||
 		kind == CLOSED_BRACE ||
 		kind == CLOSED_PARENTHESIS ||
 		kind == EOF;
