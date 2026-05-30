@@ -8,7 +8,7 @@ macro parse(String content)
     Parser parser = parser::new(tmem, &&{.src_name = "test"});
 
 	parser.parse(lexer.analyze(content));
-	return parser.ast;
+	return parser;
 }
 macro Expr* unwrap_nth(List{ Expr* } exprs, uint n)
 {
@@ -25,6 +25,11 @@ macro Primary* unwrap_primary(Expr* expr)
 {
     assert(expr.kind == PRIMARY, "PRIMARY != %s", expr.kind);
     return &expr.primary;
+}
+macro assert_external(Expr* expr, String name)
+{
+    assert(expr.kind == EXTERNAL, "EXTERNAL != %s", expr.kind);
+    assert(expr.external.name == name);
 }
 macro Infix* unwrap_infix(Expr* expr, Operator op)
 {
@@ -101,4 +106,18 @@ macro Pipeline* unwrap_pipeline(Expr* expr)
 {
     assert(expr.kind == PIPELINE);
     return &expr.pipeline;
+}
+macro Collect* unwrap_collect(Expr* expr)
+{
+    assert(expr.kind == COLLECT);
+    return &expr.collect;
+}
+macro Variable* unwrap_var(Expr* expr)
+{
+    assert(expr.kind == VARIABLE);
+    return &expr.variable;
+}
+macro assert_var(VarPool vars, Expr* expr, String name)
+{
+    assert(vars.name_of(unwrap_var(expr).id) == name);
 }
