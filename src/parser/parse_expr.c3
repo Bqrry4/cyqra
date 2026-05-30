@@ -43,17 +43,19 @@ fn Expr*? Parser.expr_head(&self)
 				ident.span
 			);
 
-			if (self.cursor.match(SPACE, RAW)) {
-				return self.parse_shell_call(external);
+			switch {
+				case self.cursor.match(OPEN_PARENTHESIS, RAW): // function style call
+					return external;
 			}
 
-			return external;
+			return self.parse_shell_call(external);
 		}	
 		//& sub_expression 
 		case OPEN_PARENTHESIS: return self.parse_subexpr();
 		case OPEN_BRACKET: return self.parse_array();
 		case OPEN_BRACE: return self.parse_record();
 		case AMP: return self.parse_lambda();
+		case IN: return self.handle_in_keyword();
 		default: {
 			//& prefix_op , expression
 			if(try op = op::check_prefix(tk.kind)) {
@@ -70,6 +72,27 @@ fn Expr*? Parser.expr_head(&self)
 			return ast::INVALID_EXPRESSION~;
 		}
 	}
+}
+
+fn Expr*? Parser.handle_in_keyword(&self)
+{
+	if (!self.in_stack.len()) {
+		self.fill_diagnostic("`in` outside pipeline");
+		return ast::INVALID_EXPRESSION~;
+	}
+
+	Span start = self.cursor.advance_check(IN).span;
+
+	InFrame* frame = &self.in_stack[^1];
+	if (frame.id == varpool::INVALID_VAR) {
+		frame.id = self.vars.bind("in");
+	}
+	frame.found = true;
+
+	return expr::@new(Variable,
+		{ frame.id },
+		start
+	);
 }
 
 fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
@@ -221,11 +244,22 @@ fn StringPart? Parser.parse_interp_ident(&self)
 		self.fill_diagnostic("expected identifier");
 		return ast::INVALID_EXPRESSION~;
 	}
-	Expr* ident = self.parse_ident();
-	return {
-		.kind = INTERP,
-		.interp = ident
-	};
+
+	Token ident = self.cursor.advance();
+	String name = ident.span.slice;
+	if (try id = self.nms.get(name)) {
+		Expr* variable = expr::@new(Variable,
+			{ id },
+			ident.span
+		);
+		return {
+			.kind = INTERP,
+			.interp = variable
+		};	
+	}
+
+	self.fill_diagnostic("must be a variable");
+	return ast::INVALID_EXPRESSION~;
 }
 
 fn StringPart? Parser.parse_interp(&self)
@@ -319,9 +353,16 @@ fn Expr*? Parser.parse_index(&self, Expr* indexed)
 
 fn Expr*? Parser.parse_pipe(&self, Expr* left, OperatorDef op_def)
 {
+	self.in_stack.push({ .id = varpool::INVALID_VAR, .found = false });
 	Expr* right = self.parse_expression(op_def.prec)!;
 
-	//Wrap right if $in present
+	InFrame frame = self.in_stack.pop()!!;
+	if (frame.found) {
+        right = expr::@new(Collect,
+            { .id = frame.id, .inner = right },
+			right.span
+        );
+    }
 
 	PipeMode mode; switch(op_def.op) {
 		case PIPE: mode = OUT;

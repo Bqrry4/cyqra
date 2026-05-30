@@ -4,6 +4,7 @@ import std::collections::list;
 import std::io;
 
 typedef VarID = uint;
+const VarID INVALID_VAR = (VarID)uint::max;
 
 struct VarPool
 {
@@ -30,7 +31,7 @@ fn void VarPool.free(&self)
 <*
 	Owns a copy of @name after push.
 *>
-fn VarID VarPool.push(&self, String name)
+fn VarID VarPool.bind(&self, String name)
 {
     VarID id = (VarID)self.names.len();
 	self.names.push(

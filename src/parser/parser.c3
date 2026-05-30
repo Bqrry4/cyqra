@@ -8,16 +8,25 @@ import cyqra::lexer::span;
 import cyqra::diagnostic;
 import utils::nullable;
 
+struct InFrame
+{
+    VarID id;
+    bool  found;
+}
+
 struct Parser
 {
 	Allocator allocator;
 
 	Ast ast;
-	VarPool vpool;
+	VarPool vars;
 	Namespace nms;
 	
 	Cursor cursor;
 	Diagnostic* diagnostic;
+
+	// For resolving in keyword
+	List{ InFrame } in_stack;
 }
 
 fn Parser new(Allocator allocator, Diagnostic* diagnostic)
@@ -26,11 +35,16 @@ fn Parser new(Allocator allocator, Diagnostic* diagnostic)
 	VarPool vpool = varpool::new(allocator);
 	Namespace nms = namespace::new(allocator);
 	nms.enter();
+
+	
+	List{ InFrame } in_stack;	
+	in_stack.init(allocator);
 	return {
 		.allocator = allocator,
-		.vpool = vpool,
+		.vars = vpool,
 		.nms = nms,
-		.diagnostic = diagnostic
+		.diagnostic = diagnostic,
+		.in_stack = in_stack,
 	};
 }
 
@@ -38,7 +52,7 @@ fn void Parser.free(&self)
 {
 	self.nms.leave();
 	self.nms.free();
-	self.vpool.free();
+	self.vars.free();
 	self.ast.free();
 }
 
@@ -98,9 +112,9 @@ fn void Parser.parse(&self, List{ Token } tokens)
 
 fn VarID Parser.define_variable(&self, String name)
 {
-	VarID id = self.vpool.push(name);
+	VarID id = self.vars.bind(name);
 	// Borrow the value from the pool with it's id
-	self.nms.add(self.vpool.name_of(id), id);
+	self.nms.add(self.vars.name_of(id), id);
 	return id;
 }
 

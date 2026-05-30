@@ -180,7 +180,7 @@ struct Pipeline
 struct Collect
 {
 	VarID id;
-	Expr* expression;
+	Expr* inner;
 }
 
 struct Expr
