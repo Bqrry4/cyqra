@@ -13,7 +13,8 @@ struct Parser
 	Allocator allocator;
 
 	Ast ast;
-	Namespace* nms;
+	VarPool vpool;
+	Namespace nms;
 	
 	Cursor cursor;
 	Diagnostic* diagnostic;
@@ -22,9 +23,12 @@ struct Parser
 fn Parser new(Allocator allocator, Diagnostic* diagnostic)
 {
 	Ast ast = ast::new(allocator);
-	Namespace* nms = namespace::new_ref(allocator);
+	VarPool vpool = varpool::new(allocator);
+	Namespace nms = namespace::new(allocator);
+	nms.enter();
 	return {
 		.allocator = allocator,
+		.vpool = vpool,
 		.nms = nms,
 		.diagnostic = diagnostic
 	};
@@ -32,9 +36,10 @@ fn Parser new(Allocator allocator, Diagnostic* diagnostic)
 
 fn void Parser.free(&self)
 {
-	self.nms.free(self.allocator);
-	alloc::free(self.allocator, self.nms);
-	//! TODO: the rest
+	self.nms.leave();
+	self.nms.free();
+	self.vpool.free();
+	self.ast.free();
 }
 
 fn void Parser.fill_diagnostic(&self, String msg)
@@ -91,6 +96,14 @@ fn void Parser.parse(&self, List{ Token } tokens)
 	};
 }
 
+fn VarID Parser.define_variable(&self, String name)
+{
+	VarID id = self.vpool.push(name);
+	// Borrow the value from the pool with it's id
+	self.nms.add(self.vpool.name_of(id), id);
+	return id;
+}
+
 fn bool is_line_terminator(TokenKind kind)
 {
 	return kind == NEW_LINE ||
@@ -129,19 +142,12 @@ fn Expr*? Parser.parse_binding(&self)
 	}
 		
 	Expr* value = self.parse_expression()!;
-	self.nms.add(identifier.span.slice.copy(self.allocator));
+	VarID id = self.define_variable(identifier.span.slice);
 	
 	return expr::@new(Binding,
-		{ LET, identifier, value },
+		{ LET, id, value },
 		self.stmt_span(start)
 	);
-}
-
-//! TODO
-fn Expr*? Parser.parse_assignment(&self)
-{
-	// io::printn("assign not supported");
-	return ast::INVALID_EXPRESSION~;
 }
 
 fn Expr*? Parser.parse_return(&self)
@@ -186,14 +192,8 @@ macro void? Parser.parse_statement_list(&self, List{ Expr* }* stmts, ...)
 	);
 }
 
-fn Expr*? Parser.parse_block_body(&self, Namespace* nms, Span start)
+fn Expr*? Parser.parse_block_body(&self, Span start)
 {
-	// Switch scope
-	self.nms = nms;
-	defer {
-		self.nms = nms.parent.ptr;
-	};
-	
 	List{ Expr* } stmts; stmts.init(mem);
 	self.parse_statement_list(&stmts, CLOSED_BRACE)!;
 
@@ -216,15 +216,10 @@ fn Expr*? Parser.parse_block(&self)
 {
 	Span start = self.cursor.advance().span;
 
-	Namespace* nms = namespace::new_ref(
-		self.allocator, nullable::value(self.nms)
-	);
-	defer {	
-		nms.free(self.allocator);
-		alloc::free(self.allocator, nms);
-	}
+	self.nms.enter();
+	defer self.nms.leave();
 	
-	return self.parse_block_body(nms, start);
+	return self.parse_block_body(start);
 }
 
 fn void? Parser.parse_parameters(&self, List{ String }* params)
@@ -242,17 +237,14 @@ fn void? Parser.parse_parameters(&self, List{ String }* params)
 
 fn Expr*? Parser.parse_function_body(&self, List{ String } params)
 {
-	Namespace* fn_nms = namespace::new_ref(self.allocator, nullable::value(self.nms));
-	defer {
-		fn_nms.free(self.allocator);
-		alloc::free(self.allocator, fn_nms);
-	}
-
+	self.nms.enter();
+	defer self.nms.leave();
+	
 	foreach (param: params) {
-		fn_nms.add(param.copy(self.allocator));
+		self.define_variable(param);
 	}
 	
-	return self.parse_block_body(fn_nms, self.cursor.peek().span);
+	return self.parse_block_body(self.cursor.peek().span);
 }
 
 fn Expr*? Parser.parse_function(&self)

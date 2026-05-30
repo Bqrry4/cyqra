@@ -1,46 +1,55 @@
 module cyqra::parser::namespace;
-import std::collections::set;
+import std::collections::list;
+import std::collections::map;
 import utils::nullable;
 
+import cyqra::parser::ast::expr;
+import cyqra::parser::varpool;
+
+alias Frame = HashMap{ String, VarID };
+
+<* Works over borrowed values *>
 struct Namespace
 {
-	Nullable{ Namespace* } parent;
-	HashSet{ String } set;
+	Allocator alloc;
+	List{ Frame } frames;
 }
 
-<* The returned ref must be freed explicitly *>
-fn Namespace* new_ref(Allocator alloc, Nullable{ Namespace* } parent = nullable::NULL)
+fn Namespace new(Allocator alloc)
 {
-	HashSet{ String } set;
-	set.init(alloc);
-
-	return alloc::new(alloc, Namespace, {
-		.parent = parent,
-		.set = set
-	});
-}
-
-
-<*
-	Frees the instance AND the added values.
-*>
-fn void Namespace.free(&self, Allocator alloc)
-{
-	self.set.@each(;value) {
-		value.free(alloc);
+	List{ Frame } frames;
+	frames.init(alloc);
+	return {
+		.alloc = alloc,
+		.frames = frames
 	};
-	self.set.free();
 }
 
-<*
-	!Gets ownership over the added value.
-*>
-fn void Namespace.add(&self, String value) => self.set.add(value);
-fn bool Namespace.has(&self, String value)
+fn void Namespace.free(&self)
 {
-	bool is_defined = self.set.contains(value);
-	if (!is_defined && !self.parent.is_null()) {
-		is_defined = self.parent.ptr.has(value);
+	foreach (&frame: self.frames) {
+		frame.free();
 	}
-	return is_defined;
+	self.frames.free();
+}
+
+fn void Namespace.enter(&self)
+{
+	HashMap{ String, VarID } frame;
+	frame.init(self.alloc);
+	self.frames.push(frame);
+}
+
+fn void Namespace.leave(&self)
+{
+	self.frames.pop()!!.free();
+}
+
+fn void Namespace.add(&self, String name, VarID id) => self.frames[^1].set(name, id);
+fn VarID? Namespace.get(&self, String name)
+{
+	foreach_r (frame: self.frames) {
+		if (try id = frame.get(name)) return id;
+	}
+	return NOT_FOUND~;
 }

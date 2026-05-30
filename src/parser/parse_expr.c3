@@ -26,14 +26,28 @@ fn Expr*? Parser.expr_head(&self)
 		//& identifier
 		//& shell_call 
 		case IDENTIFIER: {
-			Expr* ident = self.parse_ident();
-			
-			if (self.nms.has(ident.primary.token.span.slice) ||
-				self.cursor.match(OPEN_PARENTHESIS, RAW) ||
-				self.cursor.match(OPEN_BRACKET, RAW)
-			) return ident;
+			Token ident = self.cursor.advance();		
+			String name = ident.span.slice;
 
-			return self.parse_shell_call(ident);
+			if (try id = self.nms.get(name)) {
+				return expr::@new(Variable,
+					{ id },
+					ident.span
+				);
+			}
+
+			//! TODO:check for internal fns
+
+			Expr* external = expr::@new(External,
+				{ name },
+				ident.span
+			);
+
+			if (self.cursor.match(SPACE, RAW)) {
+				return self.parse_shell_call(external);
+			}
+
+			return external;
 		}	
 		//& sub_expression 
 		case OPEN_PARENTHESIS: return self.parse_subexpr();
@@ -306,6 +320,8 @@ fn Expr*? Parser.parse_index(&self, Expr* indexed)
 fn Expr*? Parser.parse_pipe(&self, Expr* left, OperatorDef op_def)
 {
 	Expr* right = self.parse_expression(op_def.prec)!;
+
+	//Wrap right if $in present
 
 	PipeMode mode; switch(op_def.op) {
 		case PIPE: mode = OUT;
