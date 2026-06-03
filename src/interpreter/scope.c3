@@ -3,18 +3,19 @@ import std::collections::map;
 import utils::nullable;
 
 import cyqra::interpreter::value;
+import cyqra::parser::varpool;
 
 struct Scope
 {
 	Allocator allocator;
-	HashMap{ String, Value } bindings;
+	HashMap{ uint, Value } bindings;
 	Nullable{ Scope* } parent;	
 }
 
 <* The returned ref must be freed explicitly *>
 fn Scope* new_ref(Allocator allocator, Nullable{ Scope* } parent = nullable::NULL)
 {
-	HashMap{ String, Value } bindings;	
+	HashMap{ uint, Value } bindings;	
 	bindings.init(allocator);
 	
 	return alloc::new(allocator, Scope, {
@@ -29,15 +30,15 @@ fn void Scope.free(&self)
 	self.bindings.free();
 }
 
-fn Value*? Scope.get_ref(&self, String ident) {
-	Value*? val = self.bindings.get_ref(ident);
+fn Value*? Scope.get_ref(&self, VarID id) {
+	Value*? val = self.bindings.get_ref((uint)id);
 	if (!(@ok(val) || self.parent.is_null())) {
-		val = self.parent.ptr.get_ref(ident);
+		val = self.parent.ptr.get_ref(id);
 	}
     return val;
 }
 
-fn void Scope.set(&self, String ident, Value value) @operator([]=)
+fn void Scope.set(&self, VarID id, Value value) @operator([]=)
 {
-	self.bindings[ident] = value;
+	self.bindings[(uint)id] = value;
 }
