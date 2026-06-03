@@ -22,7 +22,7 @@ fn void interactive() => @pool()
         //! TODO: implement proper render in the ^reader
         io::printf("\r\n");
         List{Token} tokens = lexer.analyze(line);
-    
+         
         diag.source = line;
         parser.parse(tokens);
         interpreter.interpret(parser.ast);
