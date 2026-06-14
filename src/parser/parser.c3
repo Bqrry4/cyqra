@@ -10,7 +10,7 @@ import utils::nullable;
 
 struct InFrame
 {
-    VarID id;
+    SymbolID id;
     bool  found;
 }
 
@@ -19,7 +19,7 @@ struct Parser
 	Allocator allocator;
 
 	Ast ast;
-	VarPool vars;
+	SymbolPool symbols;
 	Namespace nms;
 	
 	Cursor cursor;
@@ -32,16 +32,15 @@ struct Parser
 fn Parser new(Allocator allocator, Diagnostic* diagnostic)
 {
 	Ast ast = ast::new(allocator);
-	VarPool vpool = varpool::new(allocator);
+	SymbolPool symbols = symbol_pool::new(allocator);
 	Namespace nms = namespace::new(allocator);
 	nms.enter();
-
 	
 	List{ InFrame } in_stack;	
 	in_stack.init(allocator);
 	return {
 		.allocator = allocator,
-		.vars = vpool,
+		.symbols = symbols,
 		.nms = nms,
 		.diagnostic = diagnostic,
 		.in_stack = in_stack,
@@ -52,7 +51,7 @@ fn void Parser.free(&self)
 {
 	self.nms.leave();
 	self.nms.free();
-	self.vars.free();
+	self.symbols.free();
 	self.ast.free();
 }
 
@@ -110,11 +109,11 @@ fn void Parser.parse(&self, List{ Token } tokens)
 	};
 }
 
-fn VarID Parser.define_variable(&self, String name)
+fn SymbolID Parser.define_variable(&self, String name)
 {
-	VarID id = self.vars.bind(name);
+	SymbolID id = self.symbols.bind(name);
 	// Borrow the value from the pool with it's id
-	self.nms.add(self.vars.name_of(id), id);
+	self.nms.add(self.symbols.name_of(id), id);
 	return id;
 }
 
@@ -123,6 +122,15 @@ fn bool is_line_terminator(TokenKind kind)
 	return kind == NEW_LINE ||
 		kind == SEMICOLON ||
 		kind == EOF;
+}
+
+fn Expr* Parser.parse_type_ann(&self)
+{
+	Token ident = self.cursor.advance_check(IDENTIFIER);
+	return expr::@new(TypeAnn,
+		{ .type = ident.span.slice },
+		ident.span
+	);
 }
 
 fn Expr*? Parser.parse_binding(&self)
@@ -144,6 +152,12 @@ fn Expr*? Parser.parse_binding(&self)
 		self.fill_diagnostic("expected identifier after binding keyword");
 		return ast::INVALID_EXPRESSION~;
 	}
+	String name = identifier.span.slice;
+
+	Expr* type = {};
+	if (self.cursor.follows(COLON)) {
+		type = self.parse_type_ann();
+	}
 
 	if (!self.cursor.follows(EQ)) {
 		self.fill_diagnostic("expected '='");
@@ -156,10 +170,10 @@ fn Expr*? Parser.parse_binding(&self)
 	}
 		
 	Expr* value = self.parse_expression()!;
-	VarID id = self.define_variable(identifier.span.slice);
+	SymbolID id = self.define_variable(name);
 	
 	return expr::@new(Binding,
-		{ LET, id, value },
+		{ /*LET,*/ id, type, value },
 		self.stmt_span(start)
 	);
 }
@@ -224,8 +238,6 @@ fn Expr*? Parser.parse_block_body(&self, Span start)
 	);
 }
 
-
-
 fn Expr*? Parser.parse_block(&self)
 {
 	Span start = self.cursor.advance().span;
@@ -236,7 +248,7 @@ fn Expr*? Parser.parse_block(&self)
 	return self.parse_block_body(start);
 }
 
-fn void? Parser.parse_parameters(&self, List{ String }* params)
+fn void? Parser.parse_parameters(&self, List{ SymbolID }* params)
 {
 	do {
 		Token tk = self.cursor.peek();
@@ -245,20 +257,10 @@ fn void? Parser.parse_parameters(&self, List{ String }* params)
 			return ast::INVALID_EXPRESSION~;
 		}
 		self.cursor.advance();
-		params.push(tk.span.slice);
-	} while (self.cursor.follows(COMMA));
-}
 
-fn Expr*? Parser.parse_function_body(&self, List{ String } params)
-{
-	self.nms.enter();
-	defer self.nms.leave();
-	
-	foreach (param: params) {
-		self.define_variable(param);
-	}
-	
-	return self.parse_block_body(self.cursor.peek().span);
+		SymbolID id = self.define_variable(tk.span.slice);
+		params.push(id);
+	} while (self.cursor.follows(COMMA));
 }
 
 fn Expr*? Parser.parse_function(&self)
@@ -270,13 +272,17 @@ fn Expr*? Parser.parse_function(&self)
 		self.fill_diagnostic("function name not provided");
 		return ast::INVALID_EXPRESSION~;
 	}
-
+	String name = identifier.span.slice;
+	
 	if (!self.cursor.follows(OPEN_PARENTHESIS)) {
 		self.fill_diagnostic("missing '(' after function declaration");
 		return ast::INVALID_EXPRESSION~;
 	}
 
-	List{ String } params;
+	self.nms.enter();
+	defer self.nms.leave();
+
+	List{ SymbolID } params;
 	params.init(mem);
 	
 	if (!self.cursor.follows(CLOSED_PARENTHESIS)) {
@@ -293,9 +299,10 @@ fn Expr*? Parser.parse_function(&self)
 		return ast::INVALID_EXPRESSION~;
 	}
 	
-	Expr* body = self.parse_function_body(params)!;
+	Expr* body = self.parse_block_body(self.cursor.peek().span)!;
+	SymbolID id = self.symbols.bind(name);
 	return expr::@new(Function,
-		{ identifier, params, body },
+		{ id, params, body },
 		self.stmt_span(start)
 	);
 }

@@ -3,10 +3,11 @@ import std::collections::list;
 import std::collections::set;
 import std::io;
 
+import utils::nullable;
 import cyqra::lexer::token;
 import cyqra::lexer::span;
 import cyqra::diagnostic;
-import utils::nullable;
+import cyqra::sema::types;
 
 fn Expr*? Parser.expr_head(&self)
 {
@@ -15,13 +16,26 @@ fn Expr*? Parser.expr_head(&self)
 	Token tk = self.cursor.peek();
 	switch(tk.kind) {
 		//& literal
-		case INTEGER:
-		case FLOAT:
+		case INTEGER: {
 			self.cursor.advance();
-			return expr::@new(Primary,
-				{ .token = tk },
-				self.stmt_span(start)
+			return expr::@new(Literal,
+				{
+					.type = Type.INT,
+					._int = tk.span.slice.to_long()!!
+				},
+				self.stmt_span(start),
 			);
+		}
+		case FLOAT: {
+			self.cursor.advance();
+			return expr::@new(Literal,
+				{
+					.type = Type.FLOAT,
+					._float = tk.span.slice.to_double()!!
+				},
+				self.stmt_span(start),
+			);
+		}
 		case D_QUOTES: return self.parse_str();
 		//& identifier
 		//& shell_call 
@@ -32,7 +46,7 @@ fn Expr*? Parser.expr_head(&self)
 			if (try id = self.nms.get(name)) {
 				return expr::@new(Variable,
 					{ id },
-					ident.span
+					ident.span,
 				);
 			}
 
@@ -52,7 +66,7 @@ fn Expr*? Parser.expr_head(&self)
 		}	
 		//& sub_expression 
 		case OPEN_PARENTHESIS: return self.parse_subexpr();
-		case OPEN_BRACKET: return self.parse_array();
+		case OPEN_BRACKET: return self.parse_list();
 		case OPEN_BRACE: return self.parse_record();
 		case AMP: return self.parse_lambda();
 		case IN: return self.handle_in_keyword();
@@ -84,14 +98,14 @@ fn Expr*? Parser.handle_in_keyword(&self)
 	Span start = self.cursor.advance_check(IN).span;
 
 	InFrame* frame = &self.in_stack[^1];
-	if (frame.id == varpool::INVALID_VAR) {
-		frame.id = self.vars.bind("in");
+	if (frame.id == symbol_pool::INVALID_SYMBOL) {
+		frame.id = self.symbols.bind("in");
 	}
 	frame.found = true;
 
 	return expr::@new(Variable,
 		{ frame.id },
-		start
+		start,
 	);
 }
 
@@ -174,7 +188,7 @@ fn Expr*? Parser.parse_subexpr(&self)
 }
 
 
-fn Expr*? Parser.parse_array(&self)
+fn Expr*? Parser.parse_list(&self)
 {
 	Span start = self.cursor.advance_check(OPEN_BRACKET).span;
 
@@ -191,9 +205,12 @@ fn Expr*? Parser.parse_array(&self)
         return ast::INVALID_EXPRESSION~;
     }
 	
-	return expr::@new(Array,
-		{ elements },
-		self.stmt_span(start)
+	return expr::@new(Literal,
+		{
+			.type = Type.LIST,
+			._list = { elements }
+		},
+		self.stmt_span(start),
 	);
 }
 fn Expr*? Parser.parse_record(&self)
@@ -203,12 +220,19 @@ fn Expr*? Parser.parse_record(&self)
 	List{ RecordField } fields; fields.init(mem);
 	while (!self.cursor.match(CLOSED_BRACE)) {
 		Token tk = self.cursor.peek();
-		Expr* key;
+		RecordKey key;
 		switch (tk.kind) {
 			case IDENTIFIER:
-				key = self.parse_ident();
+				Token ident = self.cursor.advance();
+				key = {
+					.kind = STATIC,
+					.static_str = ident.span.slice
+				};
 			case D_QUOTES:
-				key = self.parse_str()!;
+				key = {
+					.kind = DYNAMIC,
+					.dynamic_str = self.parse_str()!	
+				};
 			default: {
 		    	self.fill_diagnostic("expected field name");
             	return ast::INVALID_EXPRESSION~;
@@ -231,9 +255,12 @@ fn Expr*? Parser.parse_record(&self)
         return ast::INVALID_EXPRESSION~;
     }
 	
-	return expr::@new(Record,
-		{ fields },
-		self.stmt_span(start)
+	return expr::@new(Literal,
+		{
+			.type = Type.RECORD,
+			._record = { fields }
+		},
+		self.stmt_span(start),
 	);
 }
 fn StringPart? Parser.parse_interp_ident(&self)
@@ -306,9 +333,12 @@ fn Expr*? Parser.parse_str(&self)
 		}
 		parts.push(part);
 	}
-	return expr::@new(StringLit,
-		{ parts },
-		self.stmt_span(start)
+	return expr::@new(Literal,
+		{
+			.type = Type.STRING,
+			._string = { parts }
+		},
+		self.stmt_span(start),
 	);
 }
 
@@ -353,7 +383,7 @@ fn Expr*? Parser.parse_index(&self, Expr* indexed)
 
 fn Expr*? Parser.parse_pipe(&self, Expr* left, OperatorDef op_def)
 {
-	self.in_stack.push({ .id = varpool::INVALID_VAR, .found = false });
+	self.in_stack.push({ .id = symbol_pool::INVALID_SYMBOL, .found = false });
 	Expr* right = self.parse_expression(op_def.prec)!;
 
 	InFrame frame = self.in_stack.pop()!!;
@@ -372,7 +402,8 @@ fn Expr*? Parser.parse_pipe(&self, Expr* left, OperatorDef op_def)
 	}
 
 	if (left.kind == PIPELINE) {
-		left.pipeline.links.push({ right, mode });
+		Pipeline* pipeline = &left.defs.pipeline;
+		pipeline.links.push({ right, mode });
 		left.span = left.span.extend(right.span);
 		return left;
 	}
@@ -396,34 +427,12 @@ fn Expr*? Parser.parse_dot_access(&self, Expr* accessed)
     	self.fill_diagnostic("expected field name after '.'");
     	return ast::INVALID_EXPRESSION~;
     }
-    Expr* rhs = expr::@new(Primary,
-     	{ .token = field },
-    	self.stmt_span(field.span)
-    );
 	
-   	return expr::@new(Infix,
-    	{ accessed, DOT_ACCESS, rhs },
+   	return expr::@new(Field,
+    	{ accessed, field.span.slice },
     	self.stmt_span(start)
     );
-
-	// return expr::@new(Index,
-	// 	{ accessed, rhs },
-	// 	self.stmt_span(start)
-	// );
-
 }
-
-fn Expr* Parser.parse_ident(&self)
-{
-	Token ident = self.cursor.advance_check(IDENTIFIER);
-	Span start = ident.span;
-
-	return expr::@new(Primary,
-		{ .token = ident },
-		ident.span
-	);
-}
-
 
 <* [ \n;|})] *>
 fn bool is_shell_call_terminator(TokenKind kind)
@@ -494,8 +503,12 @@ fn Expr*? Parser.parse_shell_arg(&self)
 		tk = self.cursor.peek(RAW);
 	} while (!is_shell_call_terminator(tk.kind));
 
-	return expr::@new(StringLit,
-		{ parts },
+	// Args are raw strings
+	return expr::@new(Literal,
+		{
+			.type = Type.STRING,
+			._string = { parts }
+		},
 		self.stmt_span(start)
 	);
 }
@@ -509,7 +522,7 @@ fn Expr*? Parser.parse_lambda(&self)
 		return ast::INVALID_EXPRESSION~;				
 	}
 
-	List{ String } params;
+	List{ SymbolID } params;
 	params.init(mem);
 
 	if (self.cursor.follows(PIPE) && !self.cursor.follows(PIPEX2)) {
@@ -520,9 +533,12 @@ fn Expr*? Parser.parse_lambda(&self)
 		}
 	}
 
-	Expr* body = self.parse_function_body(params)!;
-	return expr::@new(Lambda,
-		{ params, body },
+	Expr* body = self.parse_block_body(self.cursor.peek().span)!;
+	return expr::@new(Literal,
+		{
+			.type = Type.LAMBDA,
+			._lambda = { params, body },
+		},
 		self.stmt_span(start)
 	);
 }
