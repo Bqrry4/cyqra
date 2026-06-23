@@ -3,55 +3,38 @@ import std::collections::list;
 import std::collections::set;
 import std::io;
 
+import cyqra::ast;
 import cyqra::lexer::token;
 import cyqra::lexer::span;
 import cyqra::diagnostic;
 import utils::nullable;
-
-struct InFrame
-{
-    SymbolID id;
-    bool  found;
-}
 
 struct Parser
 {
 	Allocator allocator;
 
 	Ast ast;
-	SymbolPool symbols;
-	Namespace nms;
 	
 	Cursor cursor;
 	Diagnostic* diagnostic;
 
-	// For resolving in keyword
-	List{ InFrame } in_stack;
+	List{ Function* } fn_decl;
 }
 
 fn Parser new(Allocator allocator, Diagnostic* diagnostic)
 {
 	Ast ast = ast::new(allocator);
-	SymbolPool symbols = symbol_pool::new(allocator);
-	Namespace nms = namespace::new(allocator);
-	nms.enter();
+	List{ Function* } fn_decl; fn_decl.init(allocator);
 	
-	List{ InFrame } in_stack;	
-	in_stack.init(allocator);
 	return {
 		.allocator = allocator,
-		.symbols = symbols,
-		.nms = nms,
 		.diagnostic = diagnostic,
-		.in_stack = in_stack,
+		.fn_decl = fn_decl
 	};
 }
 
 fn void Parser.free(&self)
 {
-	self.nms.leave();
-	self.nms.free();
-	self.symbols.free();
 	self.ast.free();
 }
 
@@ -71,9 +54,9 @@ macro Span Parser.stmt_span(&self,
 
 <*
 	Tokens -> Ast.
-	@param tokens
+	@param [in] tokens
 *>
-fn void Parser.parse(&self, List{ Token } tokens)
+fn void Parser.parse(&self, Token[] tokens)
 {
 	self.cursor.tokens = tokens;
 	self.cursor.reset();
@@ -84,21 +67,20 @@ fn void Parser.parse(&self, List{ Token } tokens)
 		while(!self.cursor.eot()) {
 			Expr* expr;
 			fault error;
+
 			switch {
-				case self.cursor.match(EOF): break;
-				// top level
-				case self.cursor.match(FN): {
-					error = @catch(
-						@try(expr, self.parse_function())
-					);
-					if (!error) self.ast.expressions.push(expr);
-				}
-				default: {
-					error = @catch(
-						@try(expr, self.parse_statement())
-					);
-					if (!error) self.ast.expressions.push(expr);
-				}
+			case self.cursor.match(EOF): break;
+			// top level
+			case self.cursor.match(FN):
+				error = @catch(
+					@try(expr, self.parse_function())
+				);
+				if (!error) self.ast.expressions.push(expr);
+			default:
+				error = @catch(
+					@try(expr, self.parse_statement())
+				);
+				if (!error) self.ast.expressions.push(expr);
 			}
 				
 			if(error == ast::INVALID_EXPRESSION) {
@@ -109,13 +91,7 @@ fn void Parser.parse(&self, List{ Token } tokens)
 	};
 }
 
-fn SymbolID Parser.define_variable(&self, String name)
-{
-	SymbolID id = self.symbols.bind(name);
-	// Borrow the value from the pool with it's id
-	self.nms.add(self.symbols.name_of(id), id);
-	return id;
-}
+
 
 fn bool is_line_terminator(TokenKind kind)
 {
@@ -127,8 +103,8 @@ fn bool is_line_terminator(TokenKind kind)
 fn Expr* Parser.parse_type_ann(&self)
 {
 	Token ident = self.cursor.advance_check(IDENTIFIER);
-	return expr::@new(TypeAnn,
-		{ .type = ident.span.slice },
+	return expr::@new(Identifier,
+		{ ident.span.slice },
 		ident.span
 	);
 }
@@ -152,11 +128,11 @@ fn Expr*? Parser.parse_binding(&self)
 		self.fill_diagnostic("expected identifier after binding keyword");
 		return ast::INVALID_EXPRESSION~;
 	}
-	String name = identifier.span.slice;
+	Identifier id = { identifier.span.slice };
 
-	Expr* type = {};
+	Nullable{ Expr* } type = nullable::NULL;
 	if (self.cursor.follows(COLON)) {
-		type = self.parse_type_ann();
+		type = nullable::value(self.parse_type_ann());
 	}
 
 	if (!self.cursor.follows(EQ)) {
@@ -170,8 +146,6 @@ fn Expr*? Parser.parse_binding(&self)
 	}
 		
 	Expr* value = self.parse_expression()!;
-	SymbolID id = self.define_variable(name);
-	
 	return expr::@new(Binding,
 		{ /*LET,*/ id, type, value },
 		self.stmt_span(start)
@@ -241,14 +215,10 @@ fn Expr*? Parser.parse_block_body(&self, Span start)
 fn Expr*? Parser.parse_block(&self)
 {
 	Span start = self.cursor.advance().span;
-
-	self.nms.enter();
-	defer self.nms.leave();
-	
 	return self.parse_block_body(start);
 }
 
-fn void? Parser.parse_parameters(&self, List{ SymbolID }* params)
+fn void? Parser.parse_parameters(&self, List{ Identifier }* params)
 {
 	do {
 		Token tk = self.cursor.peek();
@@ -257,9 +227,7 @@ fn void? Parser.parse_parameters(&self, List{ SymbolID }* params)
 			return ast::INVALID_EXPRESSION~;
 		}
 		self.cursor.advance();
-
-		SymbolID id = self.define_variable(tk.span.slice);
-		params.push(id);
+		params.push({ tk.span.slice });
 	} while (self.cursor.follows(COMMA));
 }
 
@@ -279,10 +247,7 @@ fn Expr*? Parser.parse_function(&self)
 		return ast::INVALID_EXPRESSION~;
 	}
 
-	self.nms.enter();
-	defer self.nms.leave();
-
-	List{ SymbolID } params;
+	List{ Identifier } params;
 	params.init(mem);
 	
 	if (!self.cursor.follows(CLOSED_PARENTHESIS)) {
@@ -300,9 +265,11 @@ fn Expr*? Parser.parse_function(&self)
 	}
 	
 	Expr* body = self.parse_block_body(self.cursor.peek().span)!;
-	SymbolID id = self.symbols.bind(name);
-	return expr::@new(Function,
-		{ id, params, body },
+	Expr* fun = expr::@new(Function,
+		{ { name }, params, body },
 		self.stmt_span(start)
 	);
+
+	self.fn_decl.push(&fun.defs.fun);
+	return fun;
 }

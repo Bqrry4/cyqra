@@ -16,14 +16,11 @@ enum CursorMode
 
 struct Cursor
 {
-	List{ Token } tokens;
+	Token[] tokens;
 	sz current;
 }
 
-fn void Cursor.reset(&self)
-{
-	self.current = 0;
-}
+fn void Cursor.reset(&self) => self.current = 0;
 
 <*
 	@return ```
@@ -37,7 +34,7 @@ fn void Cursor.reset(&self)
 *>
 fn Token Cursor.sentinel_token(&self)
 {
-	Token eot = self.tokens.last()!!;
+	Token eot = self.tokens[^1];
 	eot.kind = EOF;
 	
 	Span* span = &eot.span;
@@ -71,7 +68,7 @@ macro Token Cursor.peek(&self, CursorMode mode = NORMAL)
 	if(self.eot()) return self.sentinel_token();
 	return (self.tokens[self.current]);
 }
-fn bool Cursor.eot(&self) => self.current >= self.tokens.len(); 
+fn bool Cursor.eot(&self) => self.current >= self.tokens.len; 
 
 <*
 	Consumes the token on match

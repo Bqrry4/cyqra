@@ -3,6 +3,7 @@ import std::collections::list;
 import std::collections::set;
 import std::io;
 
+import cyqra::ast;
 import utils::nullable;
 import cyqra::lexer::token;
 import cyqra::lexer::span;
@@ -14,99 +15,105 @@ fn Expr*? Parser.expr_head(&self)
 	Span start = self.cursor.peek(RAW).span;
 
 	Token tk = self.cursor.peek();
+
 	switch(tk.kind) {
-		//& literal
-		case INTEGER: {
+	//& literal
+	case INTEGER:
+		self.cursor.advance();
+		return expr::@new(Literal,
+			{
+				.type = Type.INT,
+				._int = tk.span.slice.to_long()!!
+			},
+			self.stmt_span(start),
+		);
+	case FLOAT:
+		self.cursor.advance();
+		return expr::@new(Literal,
+			{
+				.type = Type.FLOAT,
+				._float = tk.span.slice.to_double()!!
+			},
+			self.stmt_span(start),
+		);
+	case D_QUOTES: return self.parse_str();
+	//& identifier
+	//& shell_call 
+	case IDENTIFIER: return self.parse_unresolved_ident();
+	//& sub_expression 
+	case OPEN_PARENTHESIS: return self.parse_subexpr();
+	case OPEN_BRACKET: return self.parse_list();
+	case OPEN_BRACE: return self.parse_record();
+	case AMP: return self.parse_lambda();
+	case IN: return self.parse_in();
+	default:
+		//& prefix_op , expression
+		if(try op = op::check_prefix(tk.kind)) {
 			self.cursor.advance();
-			return expr::@new(Literal,
-				{
-					.type = Type.INT,
-					._int = tk.span.slice.to_long()!!
-				},
-				self.stmt_span(start),
+			
+			Expr* rhs = self.parse_expression(op::PREFIX_PREC)!;
+			return expr::@new(Prefix,
+				{ .op = op, .rhs = rhs },
+				self.stmt_span(start)
 			);
 		}
-		case FLOAT: {
-			self.cursor.advance();
-			return expr::@new(Literal,
-				{
-					.type = Type.FLOAT,
-					._float = tk.span.slice.to_double()!!
-				},
-				self.stmt_span(start),
-			);
-		}
-		case D_QUOTES: return self.parse_str();
-		//& identifier
-		//& shell_call 
-		case IDENTIFIER: {
-			Token ident = self.cursor.advance();		
-			String name = ident.span.slice;
-
-			if (try id = self.nms.get(name)) {
-				return expr::@new(Variable,
-					{ id },
-					ident.span,
-				);
-			}
-
-			//! TODO:check for internal fns
-
-			Expr* external = expr::@new(External,
-				{ name },
-				ident.span
-			);
-
-			switch {
-				case self.cursor.match(OPEN_PARENTHESIS, RAW): // function style call
-					return external;
-			}
-
-			return self.parse_shell_call(external);
-		}	
-		//& sub_expression 
-		case OPEN_PARENTHESIS: return self.parse_subexpr();
-		case OPEN_BRACKET: return self.parse_list();
-		case OPEN_BRACE: return self.parse_record();
-		case AMP: return self.parse_lambda();
-		case IN: return self.handle_in_keyword();
-		default: {
-			//& prefix_op , expression
-			if(try op = op::check_prefix(tk.kind)) {
-				self.cursor.advance();
-				
-				Expr* rhs = self.parse_expression(op::PREFIX_PREC)!;
-				return expr::@new(Prefix,
-					{ .op = op, .rhs = rhs },
-					self.stmt_span(start)
-				);
-			}
-			io::printn(tk);
-			self.fill_diagnostic("unexpected token");
-			return ast::INVALID_EXPRESSION~;
-		}
+		io::printn(tk);
+		self.fill_diagnostic("unexpected token");
+		return ast::INVALID_EXPRESSION~;
 	}
 }
 
-fn Expr*? Parser.handle_in_keyword(&self)
+<*
+	Parses an ident node followed by anything
+	that could potentially be a valid shell call.
+*>
+fn Expr*? Parser.parse_unresolved_ident(&self)
 {
-	if (!self.in_stack.len()) {
-		self.fill_diagnostic("`in` outside pipeline");
-		return ast::INVALID_EXPRESSION~;
+	Token id_tk = self.cursor.advance_check(IDENTIFIER);
+	Identifier ident = { id_tk.span.slice };
+	sz start = self.cursor.current;
+
+	/* Consume the whole expression that could be a call,
+		after the ident */
+	int depth = 0;
+	while (true) {
+		Token tk = self.cursor.peek(KEEP_SEP);
+
+		/* We must count for nesting before expecting a valid terminator */
+		if (tk.kind == OPEN_PARENTHESIS) depth++;
+		if (tk.kind == CLOSED_PARENTHESIS) depth--;
+		if (tk.kind == INTERP_START) depth++;
+		if (tk.kind == INTERP_END) depth--;
+		if (!depth && is_shell_call_terminator(tk.kind)) break;
+
+		self.cursor.advance();
 	}
 
+	sz end = self.cursor.current;
+	Token[] trailing = self.cursor.tokens[start..end - 1];
+	return expr::@new(Unresolved_Ident,
+		{ ident, trailing },
+		id_tk.span
+	);
+}
+
+fn Expr*? Parser.parse_ident(&self)
+{
+	Token ident = self.cursor.advance_check(IDENTIFIER);
+	return expr::@new(Identifier,
+		{ ident.span.slice },
+		ident.span
+	);
+}
+
+fn Expr*? Parser.parse_in(&self)
+{
 	Span start = self.cursor.advance_check(IN).span;
 
-	InFrame* frame = &self.in_stack[^1];
-	if (frame.id == symbol_pool::INVALID_SYMBOL) {
-		frame.id = self.symbols.bind("in");
-	}
-	frame.found = true;
-
-	return expr::@new(Variable,
-		{ frame.id },
-		start,
-	);
+	return mem::new(Expr, {
+		.kind = IN,
+		.span = start
+	});
 }
 
 fn Expr*? Parser.parse_expression(&self, Precedence base_prec = 0)
@@ -220,19 +227,12 @@ fn Expr*? Parser.parse_record(&self)
 	List{ RecordField } fields; fields.init(mem);
 	while (!self.cursor.match(CLOSED_BRACE)) {
 		Token tk = self.cursor.peek();
-		RecordKey key;
+		Expr* key;
 		switch (tk.kind) {
 			case IDENTIFIER:
-				Token ident = self.cursor.advance();
-				key = {
-					.kind = STATIC,
-					.static_str = ident.span.slice
-				};
+				key = self.parse_ident()!;
 			case D_QUOTES:
-				key = {
-					.kind = DYNAMIC,
-					.dynamic_str = self.parse_str()!	
-				};
+				key = self.parse_str()!;
 			default: {
 		    	self.fill_diagnostic("expected field name");
             	return ast::INVALID_EXPRESSION~;
@@ -266,27 +266,12 @@ fn Expr*? Parser.parse_record(&self)
 fn StringPart? Parser.parse_interp_ident(&self)
 {
 	self.cursor.advance_check(INTERP_IDENT);
-	
-	if (!self.cursor.match(IDENTIFIER)) {
-		self.fill_diagnostic("expected identifier");
-		return ast::INVALID_EXPRESSION~;
-	}
 
-	Token ident = self.cursor.advance();
-	String name = ident.span.slice;
-	if (try id = self.nms.get(name)) {
-		Expr* variable = expr::@new(Variable,
-			{ id },
-			ident.span
-		);
-		return {
-			.kind = INTERP,
-			.interp = variable
-		};	
-	}
-
-	self.fill_diagnostic("must be a variable");
-	return ast::INVALID_EXPRESSION~;
+	Expr* ident = self.parse_ident()!;
+	return {
+		.kind = INTERP,
+		.interp = ident
+	};
 }
 
 fn StringPart? Parser.parse_interp(&self)
@@ -383,16 +368,7 @@ fn Expr*? Parser.parse_index(&self, Expr* indexed)
 
 fn Expr*? Parser.parse_pipe(&self, Expr* left, OperatorDef op_def)
 {
-	self.in_stack.push({ .id = symbol_pool::INVALID_SYMBOL, .found = false });
 	Expr* right = self.parse_expression(op_def.prec)!;
-
-	InFrame frame = self.in_stack.pop()!!;
-	if (frame.found) {
-        right = expr::@new(Collect,
-            { .id = frame.id, .inner = right },
-			right.span
-        );
-    }
 
 	PipeMode mode; switch(op_def.op) {
 		case PIPE: mode = OUT;
@@ -438,14 +414,13 @@ fn Expr*? Parser.parse_dot_access(&self, Expr* accessed)
 fn bool is_shell_call_terminator(TokenKind kind)
 {
 	return is_line_terminator(kind) ||
-		kind == SPACE || // Used for arg terminator
+		// kind == SPACE || // Used for arg terminator
 		kind == PIPE ||
 		kind == AMP ||
 		kind == PIPE_AMP ||
 		kind == EXCL_PIPE ||
 		kind == CLOSED_BRACE ||
-		kind == CLOSED_PARENTHESIS ||
-		kind == EOF;
+		kind == CLOSED_PARENTHESIS;
 }
 
 fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
@@ -522,7 +497,7 @@ fn Expr*? Parser.parse_lambda(&self)
 		return ast::INVALID_EXPRESSION~;				
 	}
 
-	List{ SymbolID } params;
+	List{ Identifier } params;
 	params.init(mem);
 
 	if (self.cursor.follows(PIPE) && !self.cursor.follows(PIPEX2)) {

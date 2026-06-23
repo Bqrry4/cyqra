@@ -19,8 +19,8 @@ enum Operator
     ADD, SUB,
 	MUL, DIV, MOD,
 	FLOOR_DIV, POW,
-    DOT_ACCESS,
     POS, NEG, NOT,
+	EQ, NEQ, LT, GT, LTE, GTE,
 	EXEC_ASYNC,
 	PIPE, PIPE_ERR, PIPE_ALL,
 	ASGN,
@@ -53,6 +53,13 @@ const Pair{ OperatorDef, Associativity }[] INFIX = {
 	[TokenKind.PERCENT] = {{ MOD, 12}, LEFT},
 	[TokenKind.PLUS] = {{ADD, 11}, LEFT},
 	[TokenKind.MINUS] = {{SUB, 11}, LEFT},
+
+	[TokenKind.EQX2] = {{EQ, 5}, LEFT},
+	[TokenKind.NEQ] = {{NEQ, 5}, LEFT},
+	[TokenKind.LT] = {{LT, 5}, LEFT},
+	[TokenKind.LTE] = {{LTE, 5}, LEFT},
+	[TokenKind.GT] = {{GT, 5}, LEFT},
+	[TokenKind.GTE] = {{GTE, 5}, LEFT},
 
 	[TokenKind.PIPE] = {{PIPE, 3}, LEFT},
 	[TokenKind.EXCL_PIPE] = {{PIPE_ERR, 3}, LEFT},

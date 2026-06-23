@@ -1,4 +1,4 @@
-module cyqra::parser::ast;
+module cyqra::ast;
 import std::collections::list;
 
 faultdef INVALID_EXPRESSION;
@@ -30,7 +30,7 @@ fn void Ast.free(&self)
 	//! TODO: free the tree
 }
 
-module cyqra::parser::ast::expr;
+module cyqra::ast::expr;
 
 import cyqra::lexer;
 import cyqra::lexer::span;
@@ -39,11 +39,11 @@ import cyqra::parser::op;
 
 import std::io;
 import std::collections::list;
-import cyqra::parser::symbol_pool;
+import cyqra::sema::symbol_pool;
 import cyqra::sema::types;
 
-enum ExprKind
-{
+enum ExprKind {
+	IDENTIFIER,
 	LITERAL,
 	VARIABLE,
 	EXTERNAL,
@@ -51,7 +51,6 @@ enum ExprKind
 	POSTFIX,
 	INFIX,
 	FUNCTION,
-	TYPEANN,
 	CALL,
 	INDEX,
 	FIELD,
@@ -59,10 +58,13 @@ enum ExprKind
 	BLOCK,
 	RETURN,
 	PIPELINE,
-	COLLECT
+	COLLECT,
+	UNRESOLVED_IDENT,
+	IN
 }
 
 union ExprDefs {
+	Identifier ident;
 	Literal literal;
 	Variable variable;
 	External external;
@@ -73,12 +75,22 @@ union ExprDefs {
 	Index index;
 	Field field;
 	Binding binding;
-	TypeAnn type_annotation;
 	Block block;
 	Function fun;
 	Return ret;
 	Pipeline pipeline;
 	Collect collect;
+
+	Unresolved_Ident u_ident;
+}
+
+union Identifier {
+	String name;
+	SymbolID id;
+}
+struct Unresolved_Ident {
+	Identifier ident;
+	Token[] trailing;	
 }
 
 /* --- */
@@ -96,119 +108,86 @@ struct Literal {
 	}
 }
 
-struct List_
-{
+struct List_ {
 	List{ Expr* } elements;
 }
-enum KeyKind {
-    STATIC,
-    DYNAMIC
-}
-struct RecordKey
-{
-	KeyKind kind;
-	union {
-		String static_str;
-		Expr* dynamic_str;
-	}	
-}
-struct RecordField
-{
-	RecordKey key;
+
+struct RecordField {
+	Expr* key;
 	Expr* value;
 }
-
-struct Record
-{
+struct Record {
 	List{ RecordField } fields;
 }
 
-enum StringPartKind
-{
+enum StringPartKind {
     TEXT,
     INTERP,
 }
-struct StringPart
-{
+struct StringPart {
     StringPartKind kind;
     union {
 		String text;
 		Expr* interp;
     }
 }
-struct String_
-{
+struct String_ {
 	List{ StringPart } parts;
 }
 
-struct Lambda
-{
-	List{ SymbolID } params;
+struct Lambda {
+	List{ Identifier } params;
 	Expr* body;
 }
 
-struct Variable
-{
+struct Variable {
 	SymbolID id;
 }
-struct External
-{
+struct External {
 	String name;
 }
-struct TypeAnn
-{
-	String type;
-}
-struct Prefix
-{
+
+struct Prefix {
 	Operator op;
 	Expr* rhs;	
 }
-struct Postfix
-{
+struct Postfix {
 	Expr* lhs;
 	Operator op;
 }
-struct Infix
-{
+struct Infix {
 	Expr* lhs;
 	Operator op;
 	Expr* rhs;
 }
-struct Call
-{
+struct Call {
 	Expr* callee;
 	List{ Expr* } args;
 }
-struct Index
-{
+struct Index {
 	Expr* object;
 	Expr* index;
 }
-struct Field
-{
+struct Field {
 	Expr* object;
 	String name;
 }
-struct Binding
-{
+struct Binding {
 	// TokenKind kind; binding kind
-	SymbolID id;
-	Expr* type;
+	Identifier ident;
+	Nullable{ Expr* } type;
     Expr* value;
 }
-struct Block
-{
+struct Block {
 	List{ Expr* } stmts;
 }
-struct Function
-{
-	SymbolID id;
-	List{ SymbolID } params;
+
+struct Function {
+	Identifier ident;
+	List{ Identifier } params;
 	Expr* body;
 }
-struct Return
-{
+struct Return {
 	Nullable { Expr* } value;
 }
 
@@ -217,13 +196,11 @@ enum PipeMode {
     ERR,
 	OUT_ERR,
 }
-struct PipelineLink
-{
+struct PipelineLink {
 	Expr* expr;
 	PipeMode mode;
 }
-struct Pipeline
-{
+struct Pipeline {
 	Expr* head;
 	List{ PipelineLink } links; 
 }
@@ -268,9 +245,8 @@ macro @new($Type, #body, Span span)
 // {
 // 	io::print(self.kind);
 // 	io::print(" (");
-// 	switch(self.kind)
-// 	{
-// 		case PREFIX:
+// 	switch(self.kind) {
+// 	case PREFIX:
 // 			io::print(self.prefix.op);
 // 			io::print(" (");
 // 			self.prefix.rhs.print();
