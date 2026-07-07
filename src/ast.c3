@@ -42,57 +42,70 @@ import std::collections::list;
 import cyqra::sema::symbol_pool;
 import cyqra::sema::types;
 
-enum ExprKind {
-	IDENTIFIER,
-	LITERAL,
-	VARIABLE,
-	EXTERNAL,
-	PREFIX,
-	POSTFIX,
-	INFIX,
-	FUNCTION,
-	CALL,
-	INDEX,
-	FIELD,
-	BINDING,
-	BLOCK,
-	RETURN,
-	PIPELINE,
-	COLLECT,
-	UNRESOLVED_IDENT,
-	IN
+enum ExprKind: int(String field) {
+	LITERAL {"literal"},
+	VARIABLE {"variable"},
+	EXTERNAL {"external"},
+	PREFIX {"prefix"},
+	POSTFIX {"postfix"},
+	INFIX {"infix"},
+	FUNCTION {"fun"},
+	CALL {"call"},
+	INDEX {"idx"},
+	FIELD {"field"},
+	BINDING {"bnd"},
+	// BLOCK ,
+	RETURN {"ret"},
+	PIPELINE {"ppln"},
+	// COLLECT,
+	SEQUENCE {"seq"},
+	FLAT_SEQUENCE {"fseq"},
+	AMBIGUOUS_IDENT {"amb_ident"},
+	INKW {"in"},
+	OPERATOR {"op"}
 }
 
-union ExprDefs {
-	Identifier ident;
+union ExprDefs {	
 	Literal literal;
+	Operator op;
+	AmbiguousIdent amb_ident;
+	Sequence seq;
+	FlatSequence fseq;
+	Call call;
+	Index idx;
+	Field field;
+	Binding bnd;
+	Function fun;
+	Return ret;
+	Pipeline ppl;
+	InKw in;
+	
 	Variable variable;
 	External external;
 	Prefix prefix;
 	Postfix postfix;
 	Infix infix;
-	Call call;
-	Index index;
-	Field field;
-	Binding binding;
-	Block block;
-	Function fun;
-	Return ret;
-	Pipeline pipeline;
 	Collect collect;
-
-	Unresolved_Ident u_ident;
 }
 
+typedef InKw = bool;
+
+<*
+	Pre-sema: name is live.
+	Post-sema: id is live, points to a valid SymbolPool entry.
+*>
 union Identifier {
 	String name;
 	SymbolID id;
 }
-struct Unresolved_Ident {
+struct AmbiguousIdent {
 	Identifier ident;
 	Token[] trailing;	
 }
 
+struct Operator {
+	OperatorDef op_def;
+}
 /* --- */
 struct Literal {
 	Type type;
@@ -101,25 +114,17 @@ struct Literal {
 		double _float;
 		bool _bool;
 	
-		List_ _list;
-		Record _record;
-		Lambda _lambda;
-		String_ _string;
+		LiteralList _list;
+		LiteralRecord _record;
+		LiteralLambda _lambda;
+		LiteralString _string;
 	}
-}
-
-struct List_ {
-	List{ Expr* } elements;
 }
 
 struct RecordField {
 	Expr* key;
 	Expr* value;
 }
-struct Record {
-	List{ RecordField } fields;
-}
-
 enum StringPartKind {
     TEXT,
     INTERP,
@@ -131,14 +136,21 @@ struct StringPart {
 		Expr* interp;
     }
 }
-struct String_ {
-	List{ StringPart } parts;
-}
+alias LiteralRecord = List{ RecordField };
+alias LiteralList = List { Expr* };
+alias LiteralString = List{ StringPart };
 
-struct Lambda {
-	List{ Identifier } params;
+struct LiteralLambda {
+	List{ TypedIdent } params;
 	Expr* body;
 }
+/* --- */
+
+<* Sequence of expressions *>
+alias Sequence = List{ Expr* };
+<* Sequence of flatenned, leaf nodes that needs folding *>
+alias FlatSequence = Sequence;
+
 
 struct Variable {
 	SymbolID id;
@@ -174,17 +186,18 @@ struct Field {
 }
 struct Binding {
 	// TokenKind kind; binding kind
-	Identifier ident;
-	Nullable{ Expr* } type;
+	inline TypedIdent typed_name;
     Expr* value;
 }
-struct Block {
-	List{ Expr* } stmts;
+
+struct TypedIdent {
+	Identifier ident;
+	Nullable{ Expr* } type;
 }
 
 struct Function {
-	Identifier ident;
-	List{ Identifier } params;
+	inline TypedIdent typed_name;
+	List{ TypedIdent } params;
 	Expr* body;
 }
 struct Return {
@@ -222,91 +235,14 @@ struct Expr
 	Span span;
 }
 
-macro @new($Type, #body, Span span)
+macro @new(ExprKind $kind, #body, Span span)
 {
 	Expr expr = {
+		.kind = $kind,
 		.span = span,
 	};
 
-	var $field = "";
-	$foreach $member : $reflect(Expr.defs).members:
- 		$if $member.type == $Type:	
-			$field = $member.name;
-		$endif
-	$endforeach
-
-	var $init = @sprintf("expr.kind = %s;", @str_upper($Type::name));
-	$init +++= @sprintf("expr.defs.%s = #body;", $field);
+	var $init = @sprintf("expr.defs.%s = #body;", $kind.field);
 	$expand($init);
 	return mem::new(Expr, expr);
 }
-
-// fn void Expr.print(&self)
-// {
-// 	io::print(self.kind);
-// 	io::print(" (");
-// 	switch(self.kind) {
-// 	case PREFIX:
-// 			io::print(self.prefix.op);
-// 			io::print(" (");
-// 			self.prefix.rhs.print();
-// 			io::print(") ");
-// 			break;
-// 		case POSTFIX:
-// 			io::print(" (");
-// 			self.postfix.lhs.print();
-// 			io::print(") ");
-// 			io::print(self.postfix.op);
-// 			break;
-// 		case INFIX:
-// 			io::print(" (");
-// 			self.infix.lhs.print();
-// 			io::print(") ");
-// 			io::print(self.infix.op);
-// 			io::print(" (");
-// 			self.infix.rhs.print();
-// 			io::print(") ");
-// 			break;
-// 		case CALL:
-// 			self.call.callee.print();
-// 			io::print(" ARGS: ");
-// 			foreach(arg : self.call.args) {
-// 				arg.print();
-// 			}
-// 		case INDEX:
-// 			self.index.object.print();
-// 			self.index.index.print();
-// 		case BINDING:
-// 			io::print(self.binding.type);
-// 			io::print(self.binding.id);
-// 			self.binding.value.print();
-// 			break;
-// 		case BLOCK:
-// 			foreach(stmt : self.block.stmts)
-// 			{
-// 				stmt.print();
-// 			}
-// 		case FUNCTION:
-// 			io::print(self.fun.identifier);
-// 			io::print("PARAMS ");
-// 			foreach(param : self.fun.params)
-// 			{
-// 				io::print(param);
-// 			}
-// 			self.fun.body.print();
-// 			break;
-// 		// case STRING:
-// 		// 	foreach(part : self.string.parts)
-// 		// 	{
-// 		// 		if(part.kind == TEXT) {
-// 		// 			io::print(part.text);
-// 		// 		}
-// 		// 		else {
-// 		// 			part.interp.print();
-// 		// 		}
-// 		// 	}
-// 		default:
-// 	}
-// 	io::print(") ");
-// }
-
