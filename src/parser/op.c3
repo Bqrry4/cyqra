@@ -10,99 +10,80 @@ faultdef NOT_ALLOWED;
 alias Precedence = uint;
 enum Associativity
 {
+	INVALID,
 	LEFT, RIGHT
 }
 
-enum Operator
+enum Operator: (Precedence prec, Associativity as)
 {
-    INVALID,
-    ADD, SUB,
-	MUL, DIV, MOD,
-	FLOOR_DIV, POW,
-    POS, NEG, NOT,
-	EQ, NEQ, LT, GT, LTE, GTE,
-	EXEC_ASYNC,
-	PIPE, PIPE_ERR, PIPE_ALL,
-	ASGN,
-	ADD_ASGN, SUB_ASGN,
-	MUL_ASGN, DIV_ASGN
-}
+    INVALID { 0, INVALID },
+	//prefix
+    POS {15, RIGHT},
+	NEG {15, RIGHT},
+	NOT {15, RIGHT},
+	//postfix 
+	EXEC_ASYNC {2, LEFT},
 
-struct OperatorDef
-{
-	Operator op;
-	Precedence prec;
-}
-
-/* Doesn't make sense to have it variate */
-const PREFIX_PREC = 15;
-const Operator[] PREFIX = {
-	[TokenKind.PLUS] = POS,
-	[TokenKind.MINUS] = NEG,
-	[TokenKind.EXCLAMATION] = NOT,
-};
-const OperatorDef[] POSTFIX = {
-	[TokenKind.AMP] = { EXEC_ASYNC, 2 },
+	//infix
+    ADD {11, LEFT},
+	SUB {11, LEFT},
+	MUL {12, LEFT},
+	DIV {12, LEFT},
+	MOD {12, LEFT},
+	FLOOR_DIV {12, LEFT},
+	POW {13, RIGHT},
+	EQ {5, LEFT},
+	NEQ {5, LEFT},
+	LT {5, LEFT},
+	GT {5, LEFT},
+	LTE {5, LEFT},
+	GTE {5, LEFT},
 	
-};
-const Pair{ OperatorDef, Associativity }[] INFIX = {
-	[TokenKind.STARX2] = {{ POW, 13 }, RIGHT},
-	[TokenKind.STAR] = {{ MUL, 12 }, LEFT},
-	[TokenKind.SLASH] = {{ DIV, 12 }, LEFT},
-	[TokenKind.SLASHX2] = {{ FLOOR_DIV, 12 }, LEFT},
-	[TokenKind.PERCENT] = {{ MOD, 12}, LEFT},
-	[TokenKind.PLUS] = {{ADD, 11}, LEFT},
-	[TokenKind.MINUS] = {{SUB, 11}, LEFT},
-
-	[TokenKind.EQX2] = {{EQ, 5}, LEFT},
-	[TokenKind.NEQ] = {{NEQ, 5}, LEFT},
-	[TokenKind.LT] = {{LT, 5}, LEFT},
-	[TokenKind.LTE] = {{LTE, 5}, LEFT},
-	[TokenKind.GT] = {{GT, 5}, LEFT},
-	[TokenKind.GTE] = {{GTE, 5}, LEFT},
-
-	[TokenKind.PIPE] = {{PIPE, 3}, LEFT},
-	[TokenKind.EXCL_PIPE] = {{PIPE_ERR, 3}, LEFT},
-	[TokenKind.PIPE_AMP] = {{PIPE_ALL, 3}, LEFT},
-
-	[TokenKind.EQ] = {{ASGN, 1}, RIGHT},
-	[TokenKind.PLUS_EQ] = {{ADD_ASGN, 1}, RIGHT},
-	[TokenKind.MINUS_EQ] = {{SUB_ASGN, 1}, RIGHT},
-	[TokenKind.STAR_EQ] = {{MUL_ASGN, 1}, RIGHT},
-	[TokenKind.SLASH_EQ] = {{DIV_ASGN, 1}, RIGHT},
-};
-
-fn Operator? check_prefix(TokenKind tk)
-{
-	if (tk.ordinal >= PREFIX.len) return NOT_ALLOWED~;
-	Operator op = PREFIX[tk];
-	if (op == INVALID) return NOT_ALLOWED~;
-	return op;
+	// PIPE, PIPE_ERR, PIPE_ALL,
+	ASGN {1, RIGHT},
+	ADD_ASGN {1, RIGHT},
+	SUB_ASGN {1, RIGHT},
+	MUL_ASGN {1, RIGHT},
+	DIV_ASGN {1, RIGHT},
 }
 
-fn OperatorDef? check_postfix(TokenKind tk, Precedence prec)
+fn Operator to_prefix(TokenKind tk)
 {
-	if (tk.ordinal >= POSTFIX.len) return NOT_ALLOWED~;
-	OperatorDef op_def = POSTFIX[tk];
-	if (op_def.op == INVALID) return NOT_ALLOWED~;
-	if (op_def.prec <= prec) return NOT_ALLOWED~;
-	return op_def;
-}
-
-fn OperatorDef? check_infix(TokenKind tk, Precedence prec)
-{
-	if (tk.ordinal >= INFIX.len) return NOT_ALLOWED~;
-	OperatorDef op_def = INFIX[tk].first;
-	Associativity as = INFIX[tk].second;
-	if (op_def.op == INVALID) return NOT_ALLOWED~;
-	
-	bool is_higher = op_def.prec > prec;
-	bool is_right = as == Associativity.RIGHT;
-	bool is_equal = op_def.prec == prec;
-
-	if (is_higher || (is_right && is_equal)) {
-		return op_def;	
+	switch (tk) {
+	case PLUS: return POS;
+	case MINUS: return NEG;
+	case EXCLAMATION: return NOT;
+	default: return INVALID;
 	}
-	
-	return NOT_ALLOWED~;
+}
+
+fn Operator to_postfix(TokenKind tk)
+{
+	switch (tk) {
+	case AMP: return EXEC_ASYNC;
+	default: return INVALID;
+	}
+}
+fn Operator to_infix(TokenKind tk)
+{
+	switch (tk) {
+	case STARX2: return POW;
+	case STAR: return MUL;
+	case SLASH: return DIV;
+	case SLASHX2: return FLOOR_DIV;
+	case PERCENT: return MOD;
+	case PLUS: return ADD;
+	case MINUS: return SUB;
+	case EQX2: return EQ;
+	case NEQ: return NEQ;
+	case LT: return LT;
+	case LTE: return LTE;
+	case GT: return GTE;
+	case EQ: return ASGN;
+	case PLUS_EQ: return ADD_ASGN;
+	case MINUS_EQ: return SUB_ASGN;
+	case STAR_EQ: return MUL_ASGN;
+	case SLASH_EQ: return DIV_ASGN;
+	default: return INVALID;
+	}
 }
