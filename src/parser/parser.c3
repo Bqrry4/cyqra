@@ -11,7 +11,7 @@ import utils::nullable;
 
 struct Parser
 {
-	Allocator allocator;
+	Allocator alloc;
 
 	Ast ast;
 	
@@ -21,13 +21,13 @@ struct Parser
 	List{ Function* } fn_decl;
 }
 
-fn Parser new(Allocator allocator, Diagnostic* diagnostic)
+fn Parser new(Allocator alloc, Diagnostic* diagnostic)
 {
-	Ast ast = ast::new(allocator);
-	List{ Function* } fn_decl; fn_decl.init(allocator);
+	Ast ast = ast::new(alloc);
+	List{ Function* } fn_decl; fn_decl.init(alloc);
 	
 	return {
-		.allocator = allocator,
+		.alloc = alloc,
 		.diagnostic = diagnostic,
 		.fn_decl = fn_decl
 	};
@@ -62,7 +62,7 @@ fn void Parser.parse(&self, Token[] tokens)
 	self.cursor.reset();
 	self.ast.clear();
 
-	mem::@scoped(self.allocator)
+	mem::@scoped(self.alloc)
 	{
 		while(!self.cursor.eot()) {
 			Expr* expr;
@@ -100,13 +100,32 @@ fn bool is_line_terminator(TokenKind kind)
 		kind == EOF;
 }
 
-fn Expr* Parser.parse_type_ann(&self)
+fn Expr* Parser.parse_type_annotation(&self)
 {
 	Token ident = self.cursor.advance_check(IDENTIFIER);
-	return expr::@new(Identifier,
+	return expr::@new(IDENTIFIER,
 		{ ident.span.slice },
 		ident.span
 	);
+}
+
+<*
+	Parses the <ident : type_expr> phrase.
+*>
+fn TypedIdent? Parser.parse_typed_ident(&self) @inline
+{
+	Token identifier = self.cursor.advance();
+	if (identifier.kind != IDENTIFIER) {
+		self.fill_diagnostic("expected identifier");
+		return ast::INVALID_EXPRESSION~;
+	}
+	Identifier id = { identifier.span.slice };
+
+	Nullable{ Expr* } type = nullable::NULL;
+	if (self.cursor.follows(COLON)) {
+		type = nullable::value(self.parse_type_annotation());
+	}
+	return { id, type };
 }
 
 fn Expr*? Parser.parse_binding(&self)
@@ -122,18 +141,7 @@ fn Expr*? Parser.parse_binding(&self)
 	// 	default:
 	// 		return ast::INVALID_EXPRESSION~; 
 	// }
-
-	Token identifier = self.cursor.advance();
-	if (identifier.kind != IDENTIFIER) {
-		self.fill_diagnostic("expected identifier after binding keyword");
-		return ast::INVALID_EXPRESSION~;
-	}
-	Identifier id = { identifier.span.slice };
-
-	Nullable{ Expr* } type = nullable::NULL;
-	if (self.cursor.follows(COLON)) {
-		type = nullable::value(self.parse_type_ann());
-	}
+	TypedIdent ti = self.parse_typed_ident()!;
 
 	if (!self.cursor.follows(EQ)) {
 		self.fill_diagnostic("expected '='");
@@ -146,8 +154,8 @@ fn Expr*? Parser.parse_binding(&self)
 	}
 		
 	Expr* value = self.parse_expression()!;
-	return expr::@new(Binding,
-		{ /*LET,*/ id, type, value },
+	return expr::@new(BINDING,
+		{ /*LET,*/ ti, value },
 		self.stmt_span(start)
 	);
 }
@@ -163,7 +171,7 @@ fn Expr*? Parser.parse_return(&self)
 		);
 	}
 
-	return expr::@new(Return,
+	return expr::@new(RETURN,
 		{ value },
 		self.stmt_span(start)
 	);
@@ -206,8 +214,7 @@ fn Expr*? Parser.parse_block_body(&self, Span start)
 		return ast::INVALID_EXPRESSION~;
 	}
 
-	return expr::@new(Block,
-		{ stmts },
+	return expr::@new(SEQUENCE, stmts,
 		self.stmt_span(start)
 	);
 }
@@ -218,16 +225,12 @@ fn Expr*? Parser.parse_block(&self)
 	return self.parse_block_body(start);
 }
 
-fn void? Parser.parse_parameters(&self, List{ Identifier }* params)
+fn void? Parser.parse_parameters(&self, List{ TypedIdent }* params)
 {
 	do {
-		Token tk = self.cursor.peek();
-		if (tk.kind != IDENTIFIER) {
-			self.fill_diagnostic("expected identifier");
-			return ast::INVALID_EXPRESSION~;
-		}
-		self.cursor.advance();
-		params.push({ tk.span.slice });
+		params.push(
+			self.parse_typed_ident()!
+		);
 	} while (self.cursor.follows(COMMA));
 }
 
@@ -247,7 +250,7 @@ fn Expr*? Parser.parse_function(&self)
 		return ast::INVALID_EXPRESSION~;
 	}
 
-	List{ Identifier } params;
+	List{ TypedIdent } params;
 	params.init(mem);
 	
 	if (!self.cursor.follows(CLOSED_PARENTHESIS)) {
@@ -259,14 +262,20 @@ fn Expr*? Parser.parse_function(&self)
 		}
 	}
 
+	Nullable{ Expr* } type = nullable::NULL;
+	if (self.cursor.follows(COLON)) {
+		type = nullable::value(self.parse_type_annotation());
+	}
+	TypedIdent ti = { { name }, type };
+	
 	if(!self.cursor.follows(OPEN_BRACE)) {
 		self.fill_diagnostic("expected '{'");
 		return ast::INVALID_EXPRESSION~;
 	}
 	
 	Expr* body = self.parse_block_body(self.cursor.peek().span)!;
-	Expr* fun = expr::@new(Function,
-		{ { name }, params, body },
+	Expr* fun = expr::@new(FUNCTION,
+		{ ti, params, body },
 		self.stmt_span(start)
 	);
 

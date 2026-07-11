@@ -61,13 +61,15 @@ enum ExprKind: int(String field) {
 	SEQUENCE {"seq"},
 	FLAT_SEQUENCE {"fseq"},
 	AMBIGUOUS_IDENT {"amb_ident"},
-	INKW {"in"},
-	OPERATOR {"op"}
+	IN {"in"},
+	OPERATOR {"op"},
+	IDENTIFIER {"ident"},
 }
 
 union ExprDefs {	
 	Literal literal;
 	Operator op;
+	Identifier ident;
 	AmbiguousIdent amb_ident;
 	Sequence seq;
 	FlatSequence fseq;
@@ -77,7 +79,7 @@ union ExprDefs {
 	Binding bnd;
 	Function fun;
 	Return ret;
-	Pipeline ppl;
+	Pipeline ppln;
 	InKw in;
 	
 	Variable variable;
@@ -99,13 +101,10 @@ union Identifier {
 	SymbolID id;
 }
 struct AmbiguousIdent {
-	Identifier ident;
+	inline Identifier ident;
 	Token[] trailing;	
 }
 
-struct Operator {
-	OperatorDef op_def;
-}
 /* --- */
 struct Literal {
 	Type type;
@@ -122,6 +121,7 @@ struct Literal {
 }
 
 struct RecordField {
+	<* Always a String literal *>
 	Expr* key;
 	Expr* value;
 }
@@ -138,7 +138,16 @@ struct StringPart {
 }
 alias LiteralRecord = List{ RecordField };
 alias LiteralList = List { Expr* };
-alias LiteralString = List{ StringPart };
+
+enum StrKind { STATIC, DYNAMIC }
+
+struct LiteralString {
+	StrKind kind;
+	union {
+		String static_str;
+		List{ StringPart } dyn_str;
+	}
+}
 
 struct LiteralLambda {
 	List{ TypedIdent } params;
@@ -214,8 +223,8 @@ struct PipelineLink {
 	PipeMode mode;
 }
 struct Pipeline {
-	Expr* head;
 	List{ PipelineLink } links; 
+	Expr* tail;
 }
 struct Collect
 {
@@ -229,9 +238,8 @@ struct Collect
 
 struct Expr
 {
+	inline ExprDefs defs;
 	ExprKind kind;
-	ExprDefs defs;
-
 	Span span;
 }
 

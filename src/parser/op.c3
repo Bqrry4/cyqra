@@ -22,29 +22,31 @@ enum Operator: (Precedence prec, Associativity as)
 	NEG {15, RIGHT},
 	NOT {15, RIGHT},
 	//postfix 
-	EXEC_ASYNC {2, LEFT},
+	EXEC_ASYNC {3, LEFT},
 
 	//infix
     ADD {11, LEFT},
 	SUB {11, LEFT},
 	MUL {12, LEFT},
 	DIV {12, LEFT},
-	MOD {12, LEFT},
+	MOD	{12, LEFT},
 	FLOOR_DIV {12, LEFT},
 	POW {13, RIGHT},
-	EQ {5, LEFT},
+	EQ  {5, LEFT},
 	NEQ {5, LEFT},
-	LT {5, LEFT},
-	GT {5, LEFT},
+	LT  {5, LEFT},
+	GT  {5, LEFT},
 	LTE {5, LEFT},
 	GTE {5, LEFT},
-	
-	// PIPE, PIPE_ERR, PIPE_ALL,
-	ASGN {1, RIGHT},
+	ASGN     {1, RIGHT},
 	ADD_ASGN {1, RIGHT},
 	SUB_ASGN {1, RIGHT},
 	MUL_ASGN {1, RIGHT},
 	DIV_ASGN {1, RIGHT},
+
+	PIPE     {2, LEFT},
+	PIPE_ERR {2, LEFT},
+	PIPE_ALL {2, LEFT},
 }
 
 fn Operator to_prefix(TokenKind tk)
@@ -84,6 +86,9 @@ fn Operator to_infix(TokenKind tk)
 	case MINUS_EQ: return SUB_ASGN;
 	case STAR_EQ: return MUL_ASGN;
 	case SLASH_EQ: return DIV_ASGN;
+	case PIPE: return PIPE;
+	case EXCL_PIPE: return PIPE_ERR;
+	case PIPE_AMP: return PIPE_ALL;
 	default: return INVALID;
 	}
 }
