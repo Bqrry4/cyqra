@@ -14,7 +14,12 @@ const Keyword[] KEYWORDS = {
      { "if",     IF },
      { "else",   ELSE },
      { "while",  WHILE },
-     { "in",    IN },
+     { "in",     IN },
+     { "int",    INT },
+     { "float",  FLOAT },
+     { "list",   LIST },
+     { "record", RECORD },
+     { "stream", STREAM },
 };
 
 fn TokenKind check_keywords(String word)

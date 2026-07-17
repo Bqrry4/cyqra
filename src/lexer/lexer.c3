@@ -183,7 +183,8 @@ fn void? Lexer.lex_code(&self, char c)
                self.ctxs.switch_to(STRING);              
                self.emit(D_QUOTES);
           }
-          case '#': self.lex_comment();                    
+          case '@': self.emit(ASPERAND);
+          case '#': self.lex_comment();
           default: switch {
                case ascii::is_space(c): self.lex_space(c);
                case ascii::is_digit(c): self.lex_number();
@@ -265,7 +266,7 @@ fn void? Lexer.lex_string_text(&self)
 
      self.emit((self.ctx().mode == RAW)
           ? TokenKind.RAW
-          : TokenKind.STRING_PART
+          : TokenKind.TEXT
      );
 }
 

@@ -28,6 +28,7 @@ fn Parser new(Allocator alloc, Diagnostic* diagnostic)
 	
 	return {
 		.alloc = alloc,
+		.ast = ast,
 		.diagnostic = diagnostic,
 		.fn_decl = fn_decl
 	};

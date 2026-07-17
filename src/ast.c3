@@ -100,6 +100,10 @@ union Identifier {
 	String name;
 	SymbolID id;
 }
+<*
+	An ident followed by a space,
+	that could possible be a shell call
+*>
 struct AmbiguousIdent {
 	inline Identifier ident;
 	Token[] trailing;	

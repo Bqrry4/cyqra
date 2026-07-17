@@ -6,10 +6,12 @@ struct Span
 	usz row;
 	String slice;
 }
-
-fn Span Span.extend(&self, Span after) {
+<* @pure *>
+fn Span Span.extend(self, Span after) @inline
+{
+	assert(after.slice.ptr >= self.slice.ptr + self.slice.len);
 	self.slice = (String)(self.slice.ptr)[:(after.slice.ptr - self.slice.ptr + after.slice.len)];
-	return *self;
+	return self;
 }
 <*
 	Backtrack n lines in the source

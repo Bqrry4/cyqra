@@ -16,7 +16,7 @@ enum TokenKind : int @public
 	PIPE, EXCL_PIPE,
 	PIPE_AMP, PIPEX2,
 	DOT, DOTX2, DOTX3,
-
+	ASPERAND,
          
     /* Brackets */
     OPEN_PARENTHESIS, CLOSED_PARENTHESIS,
@@ -36,9 +36,12 @@ enum TokenKind : int @public
     FN, RETURN,
 	IN,
 
+	/* types */
+	INT, LIST, RECORD, STREAM,
+	
     /* string */
     D_QUOTES, DOLLAR_SIGN,
-    STRING_PART, ESCAPED_CHAR,
+    TEXT, ESCAPED_CHAR,
     INTERP_START, INTERP_END,
     INTERP_IDENT,
              

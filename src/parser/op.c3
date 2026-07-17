@@ -10,43 +10,50 @@ faultdef NOT_ALLOWED;
 alias Precedence = uint;
 enum Associativity
 {
-	INVALID,
+	NONE,
 	LEFT, RIGHT
 }
 
-enum Operator: (Precedence prec, Associativity as)
+enum Fixity {
+	NONE,
+	PREFIX,
+	POSTFIX,
+	INFIX
+}
+
+enum Operator: (Fixity fx, Precedence prec, Associativity as)
 {
-    INVALID { 0, INVALID },
-	//prefix
-    POS {15, RIGHT},
-	NEG {15, RIGHT},
-	NOT {15, RIGHT},
-	//postfix 
-	EXEC_ASYNC {3, LEFT},
+    INVALID { NONE, 0, NONE },
 
-	//infix
-    ADD {11, LEFT},
-	SUB {11, LEFT},
-	MUL {12, LEFT},
-	DIV {12, LEFT},
-	MOD	{12, LEFT},
-	FLOOR_DIV {12, LEFT},
-	POW {13, RIGHT},
-	EQ  {5, LEFT},
-	NEQ {5, LEFT},
-	LT  {5, LEFT},
-	GT  {5, LEFT},
-	LTE {5, LEFT},
-	GTE {5, LEFT},
-	ASGN     {1, RIGHT},
-	ADD_ASGN {1, RIGHT},
-	SUB_ASGN {1, RIGHT},
-	MUL_ASGN {1, RIGHT},
-	DIV_ASGN {1, RIGHT},
+    POS {PREFIX, 15, RIGHT},
+	NEG {PREFIX, 15, RIGHT},
+	NOT {PREFIX, 15, RIGHT},
+	ANY_CALL {PREFIX, 15, RIGHT},
+	
+	EXEC_ASYNC {POSTFIX, 3, LEFT},
 
-	PIPE     {2, LEFT},
-	PIPE_ERR {2, LEFT},
-	PIPE_ALL {2, LEFT},
+    ADD {INFIX, 11, LEFT},
+	SUB {INFIX, 11, LEFT},
+	MUL {INFIX, 12, LEFT},
+	DIV {INFIX, 12, LEFT},
+	MOD	{INFIX, 12, LEFT},
+	FLOOR_DIV {INFIX, 12, LEFT},
+	POW {INFIX, 13, RIGHT},
+	EQ  {INFIX, 5, LEFT},
+	NEQ {INFIX, 5, LEFT},
+	LT  {INFIX, 5, LEFT},
+	GT  {INFIX, 5, LEFT},
+	LTE {INFIX, 5, LEFT},
+	GTE {INFIX, 5, LEFT},
+	ASGN     {INFIX, 1, RIGHT},
+	ADD_ASGN {INFIX, 1, RIGHT},
+	SUB_ASGN {INFIX, 1, RIGHT},
+	MUL_ASGN {INFIX, 1, RIGHT},
+	DIV_ASGN {INFIX, 1, RIGHT},
+
+	PIPE     {INFIX, 2, LEFT},
+	PIPE_ERR {INFIX, 2, LEFT},
+	PIPE_ALL {INFIX, 2, LEFT},
 }
 
 fn Operator to_prefix(TokenKind tk)
@@ -55,6 +62,7 @@ fn Operator to_prefix(TokenKind tk)
 	case PLUS: return POS;
 	case MINUS: return NEG;
 	case EXCLAMATION: return NOT;
+	case ASPERAND: return ANY_CALL;
 	default: return INVALID;
 	}
 }

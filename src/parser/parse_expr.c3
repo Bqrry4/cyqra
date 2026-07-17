@@ -33,6 +33,57 @@ fn Expr* Parser.parse_float(&self) @inline
 	);
 }
 
+
+fn Expr*? Parser.parse_primary(&self)
+{
+	switch(self.cursor.peek().kind) {
+	//& literal
+	case INTEGER: return self.parse_int();
+	case FLOAT: return self.parse_float();
+	case D_QUOTES: return self.parse_str()!;
+	//& identifier
+	//& shell_call 
+	case IDENTIFIER:
+		Expr* expr = self.parse_ident()!;
+		/* An ident followed by space could be a shell call */
+		if (self.cursor.follows(SPACE))	{
+			self.mut_ambiguous_ident(expr);
+		}
+		return expr;
+	//& sub_expression 
+	case OPEN_PARENTHESIS: return self.parse_subexpr()!;
+	case OPEN_BRACKET: return self.parse_list()!;
+	case OPEN_BRACE: return self.parse_record()!;
+	case AMP: return self.parse_lambda()!;
+	case IN: return self.parse_in();
+	default:
+		self.fill_diagnostic("unexpected token");
+		return ast::INVALID_EXPRESSION~;
+	}
+}
+
+fn Expr*? Parser.parse_suffixes(&self, Expr* expr)
+{
+	while (true) {
+		switch {
+		case self.cursor.match(OPEN_PARENTHESIS, RAW):
+			expr = self.parse_call(expr)!;
+			continue;
+		case self.cursor.match(OPEN_BRACKET, RAW):
+			expr = self.parse_index(expr)!;
+			continue;
+		case self.cursor.match(DOT, RAW):
+			expr = self.parse_dot_access(expr)!;
+			continue;
+		case self.cursor.match(OPEN_BRACE, RAW):
+			// expr = self.parse_trailing_lambda(expr)!;
+			continue;
+		}
+		break;
+	}
+	return expr;
+}
+
 <*
 	@param [inout] fseq
 *>
@@ -41,61 +92,21 @@ fn void? Parser.expr_head(&self, FlatSequence* fseq)
 	while (true) {
 		Token tk = self.cursor.peek();
 		Operator op = op::to_prefix(tk.kind);
-		if (op != INVALID) {
-			self.cursor.advance();
-			fseq.push(expr::@new(OPERATOR,
-				op,
-				tk.span
-			));
-		} else { break; }
+		if (op == INVALID) break;
+
+		if (op == ANY_CALL) {
+			//@ The any-call operator will consume anything till the end of the expression
+			fseq.push(self.parse_any_call()!);
+			return;
+		}
+		self.cursor.advance();
+		fseq.push(expr::@new(OPERATOR,
+			op,
+			tk.span
+		));
 	} 
-
-	Expr* expr;
-	switch(self.cursor.peek().kind) {
-	//& literal
-	case INTEGER: expr = self.parse_int();
-	case FLOAT: expr = self.parse_float();
-	case D_QUOTES: expr = self.parse_str()!;
-	//& identifier
-	//& shell_call 
-	case IDENTIFIER:
-		expr = self.parse_ident()!;
-
-		/* An ident followed by space could be a shell call */
-		if (self.cursor.follows(SPACE)) {
-			self.mut_ambiguous_ident(expr);
-			break;
-		}
-
-	//& sub_expression 
-	case OPEN_PARENTHESIS: expr = self.parse_subexpr()!;
-	case OPEN_BRACKET: expr = self.parse_list()!;
-	case OPEN_BRACE: expr = self.parse_record()!;
-	case AMP: expr = self.parse_lambda()!;
-	case IN: expr = self.parse_in();
-	default:
-		self.fill_diagnostic("unexpected token");
-		return ast::INVALID_EXPRESSION~;
-	}
-
-	// tight suffixes
-	while (true) {
-		switch {
-		case self.cursor.match(OPEN_PARENTHESIS, KEEP_SEP):
-			expr = self.parse_call(expr)!;
-			continue;
-		case self.cursor.match(OPEN_BRACKET, KEEP_SEP):
-			expr = self.parse_index(expr)!;
-			continue;
-		case self.cursor.match(DOT, KEEP_SEP):
-			expr = self.parse_dot_access(expr)!;
-			continue;
-		case self.cursor.match(OPEN_BRACE, KEEP_SEP):
-			// expr = self.parse_trailing_lambda(expr)!;
-			continue;
-		}
-		break;
-	}
+	Expr* expr = self.parse_primary()!;
+	expr = self.parse_suffixes(expr)!;
 	fseq.push(expr);
 }
 
@@ -117,7 +128,11 @@ fn Expr* Parser.finish_fseq(&self, FlatSequence* fseq, Span span)
 	}
 	return expr::@new(FLAT_SEQUENCE, *fseq, span);
 }
-
+<*
+	Because an expression could be a shell call,
+	it must be parsed flattened.
+	The folding with Pratt is done in the sema step.
+*>
 fn Expr*? Parser.parse_expression(&self)
 {
 	Span outer_start = self.cursor.peek(RAW).span;
@@ -353,49 +368,22 @@ fn StringPart Parser.parse_text(&self)
 fn Expr*? Parser.parse_str(&self)
 {
 	Span start = self.cursor.advance_check(D_QUOTES).span;
-
-	String static_str = "";
-	List{ StringPart } dyn_str;
-	// parts.init(mem);
+	LiteralStringBuilder builder;
 
 	while (!self.cursor.follows(D_QUOTES)) {
-		StringPart part;
 		Token tk = self.cursor.peek();
-		
 		switch (tk.kind) {
-			case TEXT: part = self.parse_text();
-			case INTERP_START: part = self.parse_interp()!;	
-			case INTERP_IDENT: part = self.parse_interp_ident()!;
-			default: unreachable("Unexpected token in string body");
+		case TEXT:         builder.push_text(self.parse_text());
+		case INTERP_START: builder.push_interp(self.parse_interp()!);
+		case INTERP_IDENT: builder.push_interp(self.parse_interp_ident()!);
+		default: unreachable("Unexpected token in string body");
 		}
-
-		if (!dyn_str.len() && part.kind == TEXT && !static_str.len) {
-			static_str = part.text;
-			continue;
-		}
-		
-		if (!dyn_str.len()) {
-			// promote to a dynamic string
-			dyn_str.init(mem);
-			if (static_str.len) {
-				dyn_str.push({ .kind = TEXT, .text = static_str });
-			}
-		}
-		
-		dyn_str.push(part);
 	}
 
-	LiteralString str;
-	if (dyn_str.len()) {
-		str = { .kind = DYNAMIC, .dyn_str = dyn_str };
-	}
-	else {
-		str = { .kind = STATIC, .static_str = static_str };
-	}
 	return expr::@new(LITERAL,
 		{
 			.type = STRING,
-			._string = str
+			._string = builder.finish()
 		},
 		self.stmt_span(start),
 	); 
@@ -488,7 +476,6 @@ fn Expr*? Parser.parse_dot_access(&self, Expr* accessed)
 fn bool is_shell_call_terminator(TokenKind kind)
 {
 	return is_line_terminator(kind) ||
-		// kind == SPACE || // Used for arg terminator
 		kind == PIPE ||
 		kind == AMP ||
 		kind == PIPE_AMP ||
@@ -501,64 +488,89 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 {
 	Span start = callee.span;
 
-	List{ Expr* } args; args.init(mem);		
-	while (self.cursor.follows(SPACE)) {
+	List{ Expr* } args = self.parse_shell_args()!;
 	
-		Token tk = self.cursor.peek(KEEP_SEP);
-		if (is_shell_call_terminator(tk.kind)) break;
-
-		if (self.cursor.match(OPEN_PARENTHESIS)) {
-			args.push(self.parse_subexpr()!);
-			continue;
-		}
-
-		args.push(self.parse_shell_arg()!);
-	}
-
 	return expr::@new(CALL,
 		{ callee, args },
 		self.stmt_span(start)
 	);
 }
 
+fn List{ Expr* }? Parser.parse_shell_args(&self) 
+{
+	List{ Expr* } args; args.init(mem);		
+	while (self.cursor.follows(SPACE)) {
+	
+		Token tk = self.cursor.peek(KEEP_SEP);
+		if (is_shell_call_terminator(tk.kind)) break;
+
+		switch {
+		case self.cursor.match((OPEN_PARENTHESIS)):
+			args.push(self.parse_subexpr()!);
+			continue;
+		case self.cursor.match(D_QUOTES):
+			args.push(self.parse_str()!);
+			continue;
+		}
+		args.push(self.parse_shell_arg()!);
+	}
+	return args;
+}
+
+<*
+	A call of the `@ <suffixed_primary> [args...]` form 
+*>
+fn Expr*? Parser.parse_any_call(&self)
+{
+	Span start = self.cursor.advance_check(ASPERAND).span;
+
+	Expr* callee;
+	if (self.cursor.match(IDENTIFIER)) {
+		// @ already commits to shell dispatch,
+		// so the head must NOT pass through parse_primary's
+		// ambiguity check
+		callee = self.parse_ident()!;
+	} else {
+		callee = self.parse_primary()!;
+	}
+	callee = self.parse_suffixes(callee)!;
+	callee.span = start.extend(callee.span);
+	return self.parse_shell_call(callee);
+}
+
 fn Expr*? Parser.parse_shell_arg(&self)
 {
 	Span start = self.cursor.peek(RAW).span;
-
-	List{ StringPart } parts;
-	parts.init(mem);
+	LiteralStringBuilder builder;
 
 	Token tk;
 	//@ consume tokens greedily until terminator 
-	do {
+	while (true) {
 		tk = self.cursor.peek();
-		//!! TODO: Add parsing of the arg when its just a string without
-		// making it parts
-		// Also maybe slurp the raw tokens into a single string
-		StringPart part;
 		switch (tk.kind) {
-			case INTERP_START: part = self.parse_interp()!;
-			case INTERP_IDENT: part = self.parse_interp_ident()!;
-			default: {
-				self.cursor.advance();	
-				part = {
-					.kind = TEXT,
-					.text = tk.span.slice 	
-				};
-			}
+		case INTERP_START:
+			builder.flush();
+			builder.push_interp(self.parse_interp()!);
+		case INTERP_IDENT:
+			builder.flush();
+			builder.push_interp(self.parse_interp_ident()!);
+		default:
+			self.cursor.advance();
+			builder.extend(tk.span);
 		}
-
-		parts.push(part);
-
 		// check if there's more to follow
 		tk = self.cursor.peek(RAW);
-	} while (!is_shell_call_terminator(tk.kind));
+		if (tk.kind == SPACE
+			|| is_shell_call_terminator(tk.kind)) {
+			break;
+		}
+	}
 
 	// Args are raw strings
 	return expr::@new(LITERAL,
 		{
 			.type = Type.STRING,
-			._string = { .kind = DYNAMIC, .dyn_str = parts }
+			._string = builder.finish()
 		},
 		self.stmt_span(start)
 	);

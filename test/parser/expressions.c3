@@ -92,3 +92,56 @@ fn void parse_pipeline_mixed()
 	assert_ident(ppln.tail, "d");
 }
 
+// --- any-call ---
+
+fn void parse_any_call_normal()
+{
+	//@ if `echo` is an external or of Fn type,
+	// prepeding the `@` operator should parse the same as without it.
+	// The only difference is, this is set at parse time and checked in the sema,
+	// and the bare one is resolved directly in the sema.
+	// Using it might just help with visibility when indended.
+	Ast ast = parse(`
+		@echo b c
+    `);
+	Call* call = unwrap_call(ast.expressions[0]);
+	assert_ident(call.callee, "echo");
+	assert_static_string(call.args[0], "b");
+	assert_static_string(call.args[1], "c");
+}
+fn void parse_any_call_head_call()
+{
+	Ast ast = parse(`
+		@ echo("ls") -all
+    `);
+
+	Call* any_call = unwrap_call(ast.expressions[0]);
+	Call* call = unwrap_call(any_call.callee);
+
+	assert_ident(call.callee, "echo");
+	assert_static_string(call.args[0], "ls");
+
+	assert_static_string(any_call.args[0], "-all");
+}
+fn void parse_any_call_head_field_access()
+{
+	Ast ast = parse(`
+		@ a.b c
+    `);
+	Call* call = unwrap_call(ast.expressions[0]);
+	Field* field = unwrap_field(call.callee);
+	assert_ident(field.object, "a");
+	assert(field.name == "b");
+	assert_static_string(call.args[0], "c");
+}
+fn void parse_any_call_head_string()
+{
+	Ast ast = parse(`
+		@"fastfetch" b c
+    `);
+	Call* call = unwrap_call(ast.expressions[0]);
+	assert_static_string(call.callee, "fastfetch");
+	assert_static_string(call.args[0], "b");
+	assert_static_string(call.args[1], "c");
+}
+
