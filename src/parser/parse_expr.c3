@@ -133,17 +133,16 @@ fn Expr* Parser.finish_fseq(&self, FlatSequence* fseq, Span span)
 	it must be parsed flattened.
 	The folding with Pratt is done in the sema step.
 *>
-fn Expr*? Parser.parse_expression(&self)
+fn Expr*? Parser.parse_expression_tail(&self, FlatSequence* fseq)
 {
 	Span outer_start = self.cursor.peek(RAW).span;
 
 	Span stage_start = outer_start;
-	// Span start = self.cursor.peek(RAW).span;
-	FlatSequence fseq; fseq.init(self.alloc);
+	// FlatSequence fseq; fseq.init(self.alloc);
 	// Pipeline handling
 	List{ PipelineLink } links; links.init(mem);
 
-	self.expr_head(&fseq)!;
+	// self.expr_head(fseq)!;
 	while (true) {
 
 		//! TODO: line-continuation
@@ -164,28 +163,37 @@ fn Expr*? Parser.parse_expression(&self)
 			self.cursor.advance();
 			switch (ifx) {
 			case PIPE: case PIPE_ERR: case PIPE_ALL:
-				Expr* stage = self.finish_fseq(&fseq, stage_start);
+				Expr* stage = self.finish_fseq(fseq, stage_start);
 				links.push({ stage, pipe_mode_from(ifx) });
 
-				fseq = (FlatSequence){};
-				fseq.init(self.alloc);
+				*fseq = (FlatSequence){};
+				fseq.init(mem);
 				stage_start = self.cursor.peek(RAW).span;
-				self.expr_head(&fseq)!;
+				self.expr_head(fseq)!;
 				continue;
 			default:
 				fseq.push(expr::@new(OPERATOR, ifx, tk.span));
 				// rhs
-				self.expr_head(&fseq)!;
+				self.expr_head(fseq)!;
 				continue;
 			}
 		}
 		break;
 	}
 
-	Expr* tail = self.finish_fseq(&fseq, stage_start);
+	Expr* tail = self.finish_fseq(fseq, stage_start);
 	if (links.len() == 0) return tail;   // no pipe ever seen
 
 	return expr::@new(PIPELINE, { links, tail }, outer_start.extend(tail.span));
+}
+
+fn Expr*? Parser.parse_expression(&self)
+{
+	Span start = self.cursor.peek(RAW).span;
+	FlatSequence fseq; fseq.init(self.alloc);
+	self.expr_head(&fseq)!;
+
+	return self.parse_expression_tail(&fseq)!;
 }
 
 <*

@@ -258,3 +258,7 @@ macro @new(ExprKind $kind, #body, Span span)
 	$expand($init);
 	return mem::new(Expr, expr);
 }
+macro free(Expr* expr)
+{
+	mem::free(expr);
+}
