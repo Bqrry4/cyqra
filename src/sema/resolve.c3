@@ -17,14 +17,13 @@ struct Sema {
 	Parser* parser;
 }
 
-fn Sema new(Allocator alloc)
+fn Sema new()
 {
-	SymbolPool symbols = symbol_pool::new(alloc);
-	Namespace nms = namespace::new(alloc);
+	SymbolPool symbols = symbol_pool::new(mem);
+	Namespace nms = namespace::new(mem);
 	nms.enter();
 
 	return {
-		.alloc = alloc,
 		.symbols = symbols,
 		.nms = nms,
 	};

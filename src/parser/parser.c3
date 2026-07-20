@@ -11,32 +11,16 @@ import utils::nullable;
 
 struct Parser
 {
-	Allocator alloc;
-
-	Ast ast;
-	
 	Cursor cursor;
 	Diagnostic* diagnostic;
-
-	List{ Function* } fn_decl;
 }
 
-fn Parser new(Allocator alloc, Diagnostic* diagnostic)
+<* @require diagnostic != null *>
+fn Parser new(Diagnostic* diagnostic)
 {
-	Ast ast = ast::new(alloc);
-	List{ Function* } fn_decl; fn_decl.init(alloc);
-	
 	return {
-		.alloc = alloc,
-		.ast = ast,
 		.diagnostic = diagnostic,
-		.fn_decl = fn_decl
 	};
-}
-
-fn void Parser.free(&self)
-{
-	self.ast.free();
 }
 
 fn void Parser.fill_diagnostic(&self, String msg)
@@ -55,41 +39,38 @@ macro Span Parser.stmt_span(&self,
 
 <*
 	Tokens -> Ast.
-	@param [in] tokens
+	// @param [in] tokens
+	@param [out] ast
+	@param [out] fn_decl
 *>
-fn void Parser.parse(&self, Token[] tokens)
+fn void Parser.parse(&self, Ast* ast, FnDecl* fn_decl)
 {
-	self.cursor.tokens = tokens;
-	self.cursor.reset();
-	self.ast.clear();
-
-	mem::@scoped(self.alloc)
-	{
-		while(!self.cursor.eot()) {
-			Expr* expr;
-			fault error;
-
-			switch {
-			case self.cursor.match(EOF): break;
-			// top level
-			case self.cursor.match(FN):
-				error = @catch(
-					@try(expr, self.parse_function())
-				);
-				if (!error) self.ast.expressions.push(expr);
-			default:
-				error = @catch(
-					@try(expr, self.parse_statement())
-				);
-				if (!error) self.ast.expressions.push(expr);
+	while(!self.cursor.eot()) {
+		Expr* expr;
+		fault error;
+		switch {
+		case self.cursor.match(EOF): break;
+		// top level
+		case self.cursor.match(FN):
+			error = @catch(
+				@try(expr, self.parse_function())
+			);
+			if (!error) {
+				ast.expressions.push(expr);
+				fn_decl.push(&expr.fun);
 			}
-				
-			if(error == ast::INVALID_EXPRESSION) {
-				io::printn(self.diagnostic);
-				break;
-			}
+		default:
+			error = @catch(
+				@try(expr, self.parse_statement())
+			);
+			if (!error) ast.expressions.push(expr);
 		}
-	};
+			
+		if(error == ast::INVALID_EXPRESSION) {
+			io::printn(self.diagnostic);
+			break;
+		}
+	}
 }
 
 
@@ -280,6 +261,5 @@ fn Expr*? Parser.parse_function(&self)
 		self.stmt_span(start)
 	);
 
-	self.fn_decl.push(&fun.defs.fun);
 	return fun;
 }

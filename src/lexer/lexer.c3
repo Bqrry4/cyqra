@@ -21,8 +21,6 @@ struct LexContext
 
 struct Lexer
 {
-     Allocator allocator;
-
      String source;
      List{ Token } output;
 
@@ -30,18 +28,17 @@ struct Lexer
      List{ LexContext } ctxs;
 }
 
-fn Lexer new(Allocator allocator) @public
+fn Lexer new() @public
 {
      List{ Token } tokens;
-     tokens.init(allocator);
+     tokens.init(mem);
      List{ LexContext } ctxs;
-     ctxs.init(allocator);
+     ctxs.init(mem);
      ctxs.push({
           .mode = DEFAULT
      });
      
      return {
-          .allocator = allocator,
           .output = tokens,
           .ctxs = ctxs
      };

@@ -33,7 +33,6 @@ fn Expr* Parser.parse_float(&self) @inline
 	);
 }
 
-
 fn Expr*? Parser.parse_primary(&self)
 {
 	switch(self.cursor.peek().kind) {
@@ -190,7 +189,7 @@ fn Expr*? Parser.parse_expression_tail(&self, FlatSequence* fseq)
 fn Expr*? Parser.parse_expression(&self)
 {
 	Span start = self.cursor.peek(RAW).span;
-	FlatSequence fseq; fseq.init(self.alloc);
+	FlatSequence fseq; fseq.init(mem);
 	self.expr_head(&fseq)!;
 
 	return self.parse_expression_tail(&fseq)!;

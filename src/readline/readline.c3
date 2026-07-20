@@ -97,9 +97,9 @@ struct Reader
 	LineBuffer line_buffer;
 }
 
-fn Reader new(Allocator allocator) @public => {
+fn Reader new() @public => {
 	.poll = poll::new(),
-	.line_buffer = line_buffer::new(allocator)
+	.line_buffer = line_buffer::new(mem)
 };
 
 fn void Reader.free(&self)

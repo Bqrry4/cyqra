@@ -1,20 +1,19 @@
 module cyqra::ast;
 import std::collections::list;
 
+alias FnDecl = List{ Function* };
 faultdef INVALID_EXPRESSION;
 
 struct Ast
 {
-	Allocator allocator;
 	List{ Expr* } expressions;	
 }
 
-fn Ast new(Allocator allocator)
+fn Ast new()
 {
 	List{ Expr* } expressions;
-	expressions.init(allocator);
+	expressions.init(mem);
 	return {
-		.allocator = allocator,
 		.expressions = expressions
 	};
 }
