@@ -56,7 +56,9 @@ fn Expr*? Parser.parse_primary(&self)
 	case AMP: return self.parse_lambda()!;
 	case IN: return self.parse_in();
 	default:
-		self.fill_diagnostic("unexpected token");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"unexpected token"
+		);
 		return ast::INVALID_EXPRESSION~;
 	}
 }
@@ -262,7 +264,9 @@ fn Expr*? Parser.parse_subexpr(&self)
 	self.cursor.advance_check(OPEN_PARENTHESIS);
 	Expr* expr = self.parse_expression()!;
 	if(!self.cursor.follows(CLOSED_PARENTHESIS)) {
-		self.fill_diagnostic("expected ')'");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"expected ')'"
+		);
 		return ast::INVALID_EXPRESSION~;
 	}	
 	return expr;
@@ -280,7 +284,9 @@ fn Expr*? Parser.parse_list(&self)
      }
 
     if (!self.cursor.follows(CLOSED_BRACKET)) {
-        self.fill_diagnostic("expected ']'");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"expected ']'"
+		);
         return ast::INVALID_EXPRESSION~;
     }
 	
@@ -307,13 +313,17 @@ fn Expr*? Parser.parse_record(&self)
 			case D_QUOTES:
 				key = self.parse_str()!;
 			default: {
-		    	self.fill_diagnostic("expected field name");
+				self.diagnostic.error(self.cursor.peek(RAW).span,
+					"expected field name"
+				);
             	return ast::INVALID_EXPRESSION~;
 			}
 		}
 
         if (!self.cursor.follows(COLON)) {
-            self.fill_diagnostic("expected ':' after field name");
+			self.diagnostic.error(self.cursor.peek(RAW).span,
+				"expected ':' after field name"
+			);
             return ast::INVALID_EXPRESSION~;
         }
 		Expr* value = self.parse_expression()!;
@@ -324,7 +334,9 @@ fn Expr*? Parser.parse_record(&self)
 	}
 
 	if (!self.cursor.follows(CLOSED_BRACE)) {
-        self.fill_diagnostic("expected '}'");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"expected '}'"
+		);
         return ast::INVALID_EXPRESSION~;
     }
 	
@@ -354,7 +366,9 @@ fn StringPart? Parser.parse_interp(&self)
 	Expr* content = self.parse_expression()!;
 
 	if (!self.cursor.follows(INTERP_END)) {
-		self.fill_diagnostic("expected '}'");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"expected '}'"
+		);
 		return ast::INVALID_EXPRESSION~;			
 	}
 	return {
@@ -409,7 +423,9 @@ fn Expr*? Parser.parse_call(&self, Expr* callee)
      }
 
     if (!self.cursor.follows(CLOSED_PARENTHESIS)) {
-        self.fill_diagnostic("expected ')'");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"expected ')'"
+		);
         return ast::INVALID_EXPRESSION~;
     }	
  		
@@ -425,7 +441,9 @@ fn Expr*? Parser.parse_index(&self, Expr* indexed)
 	
 	Expr* index = self.parse_expression()!;
 	if(!self.cursor.follows(CLOSED_BRACKET)) {
-		self.fill_diagnostic("expected ']'");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"expected ']'"
+		);
 		return ast::INVALID_EXPRESSION~;				
 	}
 
@@ -469,7 +487,9 @@ fn Expr*? Parser.parse_dot_access(&self, Expr* accessed)
 	Token field = self.cursor.advance();
 
 	if (field.kind != IDENTIFIER) {
-    	self.fill_diagnostic("expected field name after '.'");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"expected field name after '.'"
+		);
     	return ast::INVALID_EXPRESSION~;
     }
 	
@@ -588,7 +608,9 @@ fn Expr*? Parser.parse_lambda(&self)
 	Span start = self.cursor.advance_check(AMP).span;
 
 	if (!self.cursor.follows(OPEN_BRACE)) {
-		self.fill_diagnostic("expected '{'");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"expected '{'"
+		);
 		return ast::INVALID_EXPRESSION~;				
 	}
 
@@ -597,8 +619,10 @@ fn Expr*? Parser.parse_lambda(&self)
 
 	if (self.cursor.follows(PIPE) && !self.cursor.follows(PIPEX2)) {
 		self.parse_parameters(&params)!;
-		if (self.cursor.follows(PIPE)) {
-			self.fill_diagnostic("expected '|'");
+		if (!self.cursor.follows(PIPE)) {
+			self.diagnostic.error(self.cursor.peek(RAW).span,
+				"expected '|'"
+			);
 			return ast::INVALID_EXPRESSION~;	
 		}
 	}

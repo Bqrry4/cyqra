@@ -23,23 +23,11 @@ fn Parser new(Diagnostic* diagnostic)
 	};
 }
 
-fn void Parser.fill_diagnostic(&self, String msg)
-{
-	Token cause = self.cursor.peek(RAW);
-	self.diagnostic.cause = cause.span;
-
-	self.diagnostic.error(cause.span,
-		msg
-	);
-}
-
 macro Span Parser.stmt_span(&self,
 	Span start
 ) => start.extend(self.cursor.peek(RAW).span);
 
 <*
-	Tokens -> Ast.
-	// @param [in] tokens
 	@param [out] ast
 	@param [out] fn_decl
 *>
@@ -98,7 +86,9 @@ fn TypedIdent? Parser.parse_typed_ident(&self) @inline
 {
 	Token identifier = self.cursor.advance();
 	if (identifier.kind != IDENTIFIER) {
-		self.fill_diagnostic("expected identifier");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"expected identifier"
+		);
 		return ast::INVALID_EXPRESSION~;
 	}
 	Identifier id = { identifier.span.slice };
@@ -126,12 +116,16 @@ fn Expr*? Parser.parse_binding(&self)
 	TypedIdent ti = self.parse_typed_ident()!;
 
 	if (!self.cursor.follows(EQ)) {
-		self.fill_diagnostic("expected '='");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"expected '='"
+		);
 		return ast::INVALID_EXPRESSION~;
 	}
 
 	if (is_line_terminator(self.cursor.peek(KEEP_SEP).kind)) {
-		self.fill_diagnostic("missing expression following '='");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"missing expression following '='"
+		);
 		return ast::INVALID_EXPRESSION~;
 	}
 		
@@ -190,9 +184,9 @@ fn Expr*? Parser.parse_block_body(&self, Span start)
 	self.parse_statement_list(&stmts, CLOSED_BRACE)!;
 
 	if (!self.cursor.follows(CLOSED_BRACE)) {
-	
-	io::printn(self.cursor.peek());
-		self.fill_diagnostic("expected '}'");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"expected '}'"
+		);
 		return ast::INVALID_EXPRESSION~;
 	}
 
@@ -222,13 +216,17 @@ fn Expr*? Parser.parse_function(&self)
 	
 	Token identifier = self.cursor.advance();
 	if (identifier.kind != IDENTIFIER) {
-		self.fill_diagnostic("function name not provided");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"function name not provided"
+		);
 		return ast::INVALID_EXPRESSION~;
 	}
 	String name = identifier.span.slice;
 	
 	if (!self.cursor.follows(OPEN_PARENTHESIS)) {
-		self.fill_diagnostic("missing '(' after function declaration");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"missing '(' after function declaration"
+		);
 		return ast::INVALID_EXPRESSION~;
 	}
 
@@ -239,7 +237,9 @@ fn Expr*? Parser.parse_function(&self)
 		self.parse_parameters(&params)!;
 
 		if (!self.cursor.follows(CLOSED_PARENTHESIS)) {
-			self.fill_diagnostic("expected ')'");
+			self.diagnostic.error(self.cursor.peek(RAW).span,
+				"expected ')'"
+			);
 			return ast::INVALID_EXPRESSION~;
 		}
 	}
@@ -251,7 +251,9 @@ fn Expr*? Parser.parse_function(&self)
 	TypedIdent ti = { { name }, type };
 	
 	if(!self.cursor.follows(OPEN_BRACE)) {
-		self.fill_diagnostic("expected '{'");
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"expected '{'"
+		);
 		return ast::INVALID_EXPRESSION~;
 	}
 	
