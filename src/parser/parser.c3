@@ -56,12 +56,20 @@ fn void Parser.parse(&self, Ast* ast, FnDecl* fn_decl)
 			
 		if(error == ast::INVALID_EXPRESSION) {
 			io::printn(self.diagnostic);
-			break;
+			self.sync();
 		}
 	}
 }
 
-
+<* Place the cursor to the beggining of the next expression *>
+fn void Parser.sync(&self)
+{
+	while (!is_line_terminator(
+		self.cursor.peek(KEEP_SEP).kind
+	)) self.cursor.advance();
+	//skip the terminator as well
+	self.cursor.advance();
+}
 
 fn bool is_line_terminator(TokenKind kind)
 {
