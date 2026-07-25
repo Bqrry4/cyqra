@@ -6,7 +6,7 @@ fn void lex_string() => @pool()
 {
 	List{ Token } tokens = lexer_analyze("\"Hello\"");
 	assert(match_tokens(tokens,
-		D_QUOTES, STRING_PART, D_QUOTES	
+		D_QUOTES, TEXT, D_QUOTES	
 	));
 }
 
@@ -14,6 +14,6 @@ fn void lex_string_iterp_ident() => @pool()
 {
 	List{ Token } tokens = lexer_analyze("\"Hello $world\"");
 	assert(match_tokens(tokens,
-		D_QUOTES, STRING_PART, INTERP_IDENT, IDENTIFIER, D_QUOTES	
+		D_QUOTES, TEXT, INTERP_IDENT, IDENTIFIER, D_QUOTES	
 	));
 }

@@ -526,8 +526,7 @@ fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 fn List{ Expr* }? Parser.parse_shell_args(&self) 
 {
 	List{ Expr* } args; args.init(mem);		
-	while (self.cursor.follows(SPACE)) {
-	
+	while (true) {
 		Token tk = self.cursor.peek(KEEP_SEP);
 		if (is_shell_call_terminator(tk.kind)) break;
 
@@ -538,8 +537,9 @@ fn List{ Expr* }? Parser.parse_shell_args(&self)
 		case self.cursor.match(D_QUOTES):
 			args.push(self.parse_str()!);
 			continue;
+		default:
+			args.push(self.parse_shell_arg()!);
 		}
-		args.push(self.parse_shell_arg()!);
 	}
 	return args;
 }
@@ -630,7 +630,7 @@ fn Expr*? Parser.parse_lambda(&self)
 	Expr* body = self.parse_block_body(self.cursor.peek().span)!;
 	return expr::@new(LITERAL,
 		{
-			.type = Type.LAMBDA,
+			.type = Type.FN,
 			._lambda = { params, body },
 		},
 		self.stmt_span(start)

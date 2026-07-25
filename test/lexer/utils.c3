@@ -1,8 +1,8 @@
 module cyqra::lexer @test;
 
-macro lexer_analyze(String content)
+macro lexer_analyze(String content) => mem::@scoped(tmem)
 {
-	Lexer lex = lexer::new(tmem);
+	Lexer lex = lexer::new();
 	return lex.analyze(content);
 }
 

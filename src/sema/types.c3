@@ -9,7 +9,6 @@ enum Type
 	INT,
 	FLOAT,
 	BOOL,
-	LAMBDA,
 	STRING,
 	LIST,
 	RECORD,

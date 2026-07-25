@@ -5,13 +5,18 @@ import std::collections::list;
 import utils::nullable;
 import std::io;
 
-macro parse(String content)
+macro parse(String content) => mem::@scoped(tmem)
 {
-	Lexer lexer = lexer::new(tmem);
-    Parser parser = parser::new(tmem, &&{.src_name = "test"});
+	Lexer lexer = lexer::new();
+    Parser parser = parser::new(&&{.src_name = "test"});
 
-	parser.parse(lexer.analyze(content).array_view());
-	return parser.ast;
+   	Ast ast = ast::new();
+   	FnDecl fn_decl; fn_decl.init(mem);
+
+    parser.cursor.tokens = lexer.analyze(content).array_view();
+    parser.cursor.reset();
+    parser.parse(&ast, &fn_decl);
+	return ast;
 }
 
 macro assert_kind(Expr* e, ExprKind kind)
@@ -112,7 +117,11 @@ macro unwrap_field(Expr* e)
     assert_kind(e, FIELD);
     return &e.field;
 }
-// macro StringPart* unwrap_nth_str_part(StringLit* str, uint n, StringPartKind expected)
+macro unwrap_binding(Expr* e)
+{
+    assert_kind(e, BINDING);
+    return &e.bnd;
+}// macro StringPart* unwrap_nth_str_part(StringLit* str, uint n, StringPartKind expected)
 // {
 //     assert(str.parts.len() > n,
 //         "Expected at least %d parts in string got %d", n + 1, str.parts.len());
