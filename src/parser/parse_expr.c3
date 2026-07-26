@@ -44,7 +44,7 @@ fn Expr*? Parser.parse_primary(&self)
 	//& shell_call 
 	case IDENTIFIER:
 		Expr* expr = self.parse_ident()!;
-		/* An ident followed by space could be a shell call */
+		//@ An ident followed by space could be a shell call
 		if (self.cursor.follows(SPACE))	{
 			self.mut_ambiguous_ident(expr);
 		}
@@ -90,21 +90,26 @@ fn Expr*? Parser.parse_suffixes(&self, Expr* expr)
 *>
 fn void? Parser.expr_head(&self, FlatSequence* fseq)
 {
-	while (true) {
+	while LOOP: (true) {
 		Token tk = self.cursor.peek();
 		Operator op = op::to_prefix(tk.kind);
-		if (op == INVALID) break;
 
-		if (op == ANY_CALL) {
+		switch (op) {
+		case INVALID:
+			// not an op
+			break LOOP;
+		case ANY_CALL:
 			//@ The any-call operator will consume anything till the end of the expression
 			fseq.push(self.parse_any_call()!);
 			return;
+		default:
+			// eat the op
+			self.cursor.advance();
+			fseq.push(expr::@new(OPERATOR,
+				op,
+				tk.span
+			));
 		}
-		self.cursor.advance();
-		fseq.push(expr::@new(OPERATOR,
-			op,
-			tk.span
-		));
 	} 
 	Expr* expr = self.parse_primary()!;
 	expr = self.parse_suffixes(expr)!;
