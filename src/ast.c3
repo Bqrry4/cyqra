@@ -120,6 +120,7 @@ struct Literal {
 		LiteralRecord _record;
 		LiteralLambda _lambda;
 		LiteralString _string;
+		LiteralAtom _atom;
 	}
 }
 
@@ -156,6 +157,9 @@ struct LiteralLambda {
 	List{ TypedIdent } params;
 	Expr* body;
 }
+
+alias LiteralAtom = String;
+
 /* --- */
 
 <* Sequence of expressions *>

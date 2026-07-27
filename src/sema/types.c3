@@ -14,6 +14,7 @@ enum Type
 	RECORD,
 	FN,
 	STREAM,
+	ATOM
 }
 
 fn bool compatibility(Type left, Type right)

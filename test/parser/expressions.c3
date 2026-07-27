@@ -23,7 +23,16 @@ fn void parse_float()
 		3.6
 	);
 }
-
+fn void parse_atom()
+{
+	Ast ast = parse(`
+		:err
+	`);
+	assert_atom(
+		unwrap_nth(ast.expressions, 0),
+		"err"
+	);
+}
 // --- fseq ---
 fn void parse_fseq_infix()
 {

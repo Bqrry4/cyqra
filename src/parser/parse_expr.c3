@@ -54,6 +54,7 @@ fn Expr*? Parser.parse_primary(&self)
 	case OPEN_BRACKET: return self.parse_list()!;
 	case OPEN_BRACE: return self.parse_record()!;
 	case AMP: return self.parse_lambda()!;
+	case COLON: return self.parse_atom()!;
 	case IN: return self.parse_in();
 	default:
 		self.diagnostic.error(self.cursor.peek(RAW).span,
@@ -641,3 +642,25 @@ fn Expr*? Parser.parse_lambda(&self)
 		self.stmt_span(start)
 	);
 }
+
+fn Expr*? Parser.parse_atom(&self) @inline
+{
+	Span span = self.cursor.advance_check(COLON).span;
+
+	if (!self.cursor.match(IDENTIFIER, RAW)) {
+		self.diagnostic.error(self.cursor.peek(RAW).span,
+			"expected identifier"
+		);
+		return ast::INVALID_EXPRESSION~;
+	}
+
+	LiteralAtom atom = self.cursor.advance().span.slice;
+	return expr::@new(LITERAL,
+		{
+			.type = Type.ATOM,
+			._atom = atom,
+		},
+		self.stmt_span(span),
+	);
+}
+

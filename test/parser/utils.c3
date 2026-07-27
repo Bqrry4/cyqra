@@ -47,6 +47,12 @@ macro assert_float(Expr* e, double v)
     assert(l.type == FLOAT);
     assert(l._float == v);
 }
+macro assert_atom(Expr* e, String v)
+{
+    Literal* l = unwrap_literal(e);
+    assert(l.type == ATOM);
+    assert(l._atom == v);
+}
 macro assert_ident(Expr* e, String name)
 {
     assert_kind(e, IDENTIFIER);
