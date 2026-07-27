@@ -42,6 +42,7 @@ fn void Sema.free(&self) {
 *>
 fn void Sema.resolve(&self, Ast* ast)
 {
+	//! Reuse the logic for the nested scopes
     foreach (expr: ast.expressions) {
 		switch (expr.kind) {
 		// check the types
@@ -64,7 +65,17 @@ fn void Sema.resolve(&self, Ast* ast)
 			if (expr.kind == FLAT_SEQUENCE) {
 				nextcase FLAT_SEQUENCE;
 			}
+			if (expr.kind == CALL) {
+				nextcase CALL;
+			}
 			nextcase default;
+		case CALL:
+			// A standalone call on external is inherited
+			self.infer_call(expr);
+			Expr* callee = expr.call.callee;
+			if (callee.kind == EXTERNAL) {
+				callee.external.mode = INHERITED;
+			}
 		// infer (checks mismatched type in ops)
 		default: (void)self.infer(expr);
 		}
@@ -106,7 +117,7 @@ fn Type Sema.infer(&self, Expr* expr)
 	case POSTFIX: return self.infer_postfix(expr);
 	case INFIX: return self.infer_infix(expr);
 	case IDENTIFIER: return self.infer_ident(expr);
-	// case CALL: return self.infer_call(expr);
+	case CALL: return self.infer_call(expr);
 	// case BLOCK: return self.infer_block(expr);
 	default:
 	}
@@ -227,7 +238,7 @@ fn void Sema.classify_ident(&self, Expr* ident)
 	}
 	*ident = {
 		.kind = EXTERNAL,
-		.defs = { .external = { name } },
+		.defs = { .external = { .name = name } },
 		.span = ident.span
 	};
 }
@@ -242,6 +253,13 @@ fn Type Sema.infer_ident(&self, Expr* expr)
 		return FN;
 	default: unreachable("must be a VARIABLE or EXTERNAL");
 	}
+}
+
+fn Type Sema.infer_call(&self, Expr* expr)
+{
+	//! check args and arity as well
+	// it must be piggybacked in the type
+	return self.infer(expr.call.callee);
 }
 
 fn Type Sema.infer_prefix(&self, Expr* expr)

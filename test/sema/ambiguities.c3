@@ -35,7 +35,6 @@ fn void parse_var_expr()
 	assert_var(ifx.lhs, bnd.typed_name.ident.id);
 	assert_var(ifx.rhs, bnd.typed_name.ident.id);
 }
-
 fn void parse_expr_with_shell_call()
 {
 	Ast ast = resolve(`
@@ -47,4 +46,21 @@ fn void parse_expr_with_shell_call()
 	assert_var(ifx.lhs, bnd.typed_name.ident.id);
 	Call* call = parser::unwrap_call(ifx.rhs);
 	assert_external(call.callee, "ls");
+}
+fn void parse_call_external_inherited()
+{
+	Ast ast = resolve(`
+		ls -all
+	`);
+	Call* call = parser::unwrap_call(ast.expressions[0]);
+	assert_external(call.callee, "ls", INHERITED);
+}
+fn void parse_call_external_captured()
+{
+	Ast ast = resolve(`
+		6 + echo 1
+	`);
+	Infix* ifx = unwrap_infix(ast.expressions[0], ADD);
+	Call* call = parser::unwrap_call(ifx.rhs);
+	assert_external(call.callee, "echo", CAPTURED);
 }

@@ -41,7 +41,7 @@ import std::collections::list;
 import cyqra::sema::symbol_pool;
 import cyqra::sema::types;
 
-enum ExprKind: int(String field) {
+enum ExprKind: (String field) {
 	LITERAL {"literal"},
 	VARIABLE {"variable"},
 	EXTERNAL {"external"},
@@ -167,8 +167,11 @@ alias FlatSequence = Sequence;
 struct Variable {
 	SymbolID id;
 }
+
+enum ExternalMode { CAPTURED, INHERITED }
 struct External {
 	String name;
+	ExternalMode mode;
 }
 
 struct Prefix {

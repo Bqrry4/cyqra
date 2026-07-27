@@ -3,6 +3,7 @@ import cyqra::lexer;
 import cyqra::parser;
 import cyqra::ast;
 import cyqra::diagnostic;
+import std::io;
 
 macro resolve(String content) => mem::@scoped(tmem)
 {
@@ -22,10 +23,14 @@ macro resolve(String content) => mem::@scoped(tmem)
 	return ast;
 }
 
-macro assert_external(Expr* e, String name)
+macro assert_external(Expr* e, String name, ExternalMode... $mode)
 {
     parser::assert_kind(e, EXTERNAL);
+	io::printn(e.external.mode);
     assert(e.external.name == name);
+	$if $mode.len == 1:
+		assert(e.external.mode == $mode[0]);
+	$endif
 }
 macro assert_var(Expr* e, SymbolID id)
 {
