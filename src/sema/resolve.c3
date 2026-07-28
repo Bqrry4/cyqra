@@ -7,6 +7,8 @@ import cyqra::parser;
 import cyqra::diagnostic;
 import std::collections::list;
 import utils::nullable;
+import cyqra::lexer::token;
+
 import std::io;
 
 struct Sema {
@@ -60,8 +62,7 @@ fn void Sema.resolve(&self, Ast* ast)
 			expr::free(resolved);
 			nextcase default;
 		case AMBIGUOUS_IDENT:
-			// mutate the node
-			self.resolve_ambiguous_ident(expr)!!;
+			self.mut_resolve_ambiguous_ident(expr)!!;
 			if (expr.kind == FLAT_SEQUENCE) {
 				nextcase FLAT_SEQUENCE;
 			}
@@ -144,7 +145,7 @@ fn Expr* Sema.fold_fseq(&self, FlatSequence* fseq, sz* pos, Precedence prec = 0)
 		lhs.kind = PREFIX;
 		lhs.defs.prefix = { op, rhs };
 	case AMBIGUOUS_IDENT:
-		self.resolve_ambiguous_ident(lhs)!!;
+		self.mut_resolve_ambiguous_ident(lhs)!!;
 		if (lhs.kind == FLAT_SEQUENCE) {
 			lhs = self.fold_fseq(&lhs.fseq, &&0, prec);
 		}
@@ -186,37 +187,23 @@ fn Expr* Sema.fold_fseq(&self, FlatSequence* fseq, sz* pos, Precedence prec = 0)
 <*
 	@param [inout] expr
 *>
-fn void? Sema.resolve_ambiguous_ident(&self, Expr* expr)
+fn void? Sema.mut_resolve_ambiguous_ident(&self, Expr* expr)
 {
 	Expr* ident = mem::@clone(*expr);
 	self.classify_ident(ident);
 
-	bool is_shell_call;
-	switch (ident.kind) {
-	case VARIABLE:
-		SymbolID id = ident.ident.id;
-		Type type = self.symbols.def_of(id).type;
-		is_shell_call = (type == FN);
-	case EXTERNAL:
-		is_shell_call = true;
-	default: unreachable("not an external or variable");
-	}
+	bool is_shell_call = self.is_shell_callable(ident);
+	Token[] trailing = expr.amb_ident.trailing;
 
+	if (trailing.len == 0) {
+		mut_resolve_bare(expr, ident, is_shell_call);
+		return;
+	}
+		
 	Parser parser;
 	parser.diagnostic = self.diagnostic;
-	parser.cursor.tokens = expr.amb_ident.trailing;
-	Expr* resolved @noinit;
-	if (is_shell_call) {
-		resolved = parser.parse_shell_call(ident)!;
-	}
-	else {
-		FlatSequence fseq; fseq.init(self.alloc);
-		fseq.push(ident);
-		resolved = parser.parse_expression_tail(&fseq)!;
-	}
-	expr.kind = resolved.kind;
-	expr.defs = resolved.defs;
-	expr::free(resolved);
+	parser.cursor.tokens = trailing;
+	mut_resolve_trailing(&parser, expr, ident, is_shell_call)!;
 }
 
 <*
@@ -241,6 +228,58 @@ fn void Sema.classify_ident(&self, Expr* ident)
 		.defs = { .external = { .name = name } },
 		.span = ident.span
 	};
+}
+
+<*
+	@param [in] ident
+*>
+fn bool Sema.is_shell_callable(&self, Expr* ident)
+{
+	switch (ident.kind) {
+	case VARIABLE:
+		SymbolID id = ident.variable.id;
+		Type type = self.symbols.def_of(id).type;
+		return (type == FN);
+	case EXTERNAL:
+		return true;
+	default: unreachable("not an external or variable");
+	}
+}
+<*
+	@param [out] out
+	@param [in] ident
+*>
+fn void mut_resolve_bare(Expr* out, Expr* ident, bool is_shell_call) @local
+{
+	if (is_shell_call) {
+		// promote it to a call
+		out.kind = CALL;
+		out.call = { .callee = ident };
+		return;
+	}
+	out.kind = ident.kind;
+	out.defs = ident.defs;
+}
+<*
+	@param [in] parser
+	@param [out] out
+	@param [in] ident
+*>
+fn void? mut_resolve_trailing(Parser* parser, Expr* out, Expr* ident, bool is_shell_call) @local
+{
+	Expr* resolved @noinit;
+	if (is_shell_call) {
+		resolved = parser.parse_shell_call(ident)!;
+	}
+	else {
+		FlatSequence fseq; fseq.init(mem);
+		fseq.push(ident);
+		resolved = parser.parse_expression_tail(&fseq)!;
+	}
+	
+	out.kind = resolved.kind;
+	out.defs = resolved.defs;
+	expr::free(resolved);
 }
 
 fn Type Sema.infer_ident(&self, Expr* expr)

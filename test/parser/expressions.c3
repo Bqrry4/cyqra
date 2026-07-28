@@ -78,7 +78,7 @@ fn void parse_pipeline()
 	assert_ambiguous_ident(ppln.links[1].expr, "b");
     assert(ppln.links[1].mode == OUT);
 	// 'c' doesn't continue with a space
-	assert_ident(ppln.tail, "c");
+	assert_ambiguous_ident(ppln.tail, "c");
 }
 
 fn void parse_pipeline_mixed()
@@ -98,7 +98,7 @@ fn void parse_pipeline_mixed()
 	assert_ambiguous_ident(ppln.links[2].expr, "c");
     assert(ppln.links[2].mode == ERR);
 
-	assert_ident(ppln.tail, "d");
+	assert_ambiguous_ident(ppln.tail, "d");
 }
 
 // --- any-call ---

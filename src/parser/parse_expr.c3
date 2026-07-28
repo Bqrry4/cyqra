@@ -44,9 +44,20 @@ fn Expr*? Parser.parse_primary(&self)
 	//& shell_call 
 	case IDENTIFIER:
 		Expr* expr = self.parse_ident()!;
-		//@ An ident followed by space could be a shell call
-		if (self.cursor.follows(SPACE))	{
-			self.mut_ambiguous_ident(expr);
+		
+		Token tk = self.cursor.peek(RAW);
+		switch (tk.kind) {
+		case OPEN_BRACE:
+		case OPEN_BRACKET:
+		case OPEN_PARENTHESIS:
+			return expr;
+		default:
+			// *promote* it to an ambiguous ident
+			expr.kind = AMBIGUOUS_IDENT;
+		}
+		if (tk.kind == SPACE) {
+			// self.cursor.advance();
+			expr.amb_ident.trailing = self.ambiguous_ident_trailing();
 		}
 		return expr;
 	//& sub_expression 
@@ -203,18 +214,10 @@ fn Expr*? Parser.parse_expression(&self)
 	return self.parse_expression_tail(&fseq)!;
 }
 
-<*
-	Mutates an ident to an ambiguous ident, that slurps anything
-	that could potentially lead to a valid shell call.
-*>
-fn void Parser.mut_ambiguous_ident(&self, Expr* ident)
+<* Slurps anything that could potentially lead to a valid shell call. *>
+fn Token[] Parser.ambiguous_ident_trailing(&self)
 {
-	ident.kind = AMBIGUOUS_IDENT;
-
 	sz start = self.cursor.current;
-
-	/* Consume the whole expression that could be a call,
-		after the ident */
 	int depth = 0;
 	while (true) {
 		Token tk = self.cursor.peek(KEEP_SEP);
@@ -230,9 +233,9 @@ fn void Parser.mut_ambiguous_ident(&self, Expr* ident)
 	}
 
 	sz end = self.cursor.current;
-	Token[] trailing = self.cursor.tokens[start..end - 1];
+	Token[] trailing = self.cursor.tokens[start..end-1];
 
-	ident.amb_ident.trailing = trailing;
+	return trailing;
 }
 
 fn Expr*? Parser.parse_ident(&self)
@@ -520,9 +523,13 @@ fn bool is_shell_call_terminator(TokenKind kind)
 fn Expr*? Parser.parse_shell_call(&self, Expr* callee)
 {
 	Span start = callee.span;
+	List{ Expr* } args;
 
-	List{ Expr* } args = self.parse_shell_args()!;
-	
+	Token tk = self.cursor.peek(KEEP_SEP);
+	if (!is_shell_call_terminator(tk.kind)) {
+		args = self.parse_shell_args()!;
+	}
+		
 	return expr::@new(CALL,
 		{ callee, args },
 		self.stmt_span(start)

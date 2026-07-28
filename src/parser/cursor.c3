@@ -3,7 +3,7 @@ import std::collections::list;
 
 import cyqra::lexer::token;
 import cyqra::lexer::span;
-
+import std::io;
 enum CursorMode
 {
 	<* skip white spaces and terminators *>
@@ -31,6 +31,7 @@ fn void Cursor.reset(&self) => self.current = 0;
 			ptr: &last.span.slice[len]
 			length: 0
 	```
+	@require self.tokens.len > 0 : "empty token source"
 *>
 fn Token Cursor.sentinel_token(&self)
 {

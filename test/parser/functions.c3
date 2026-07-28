@@ -44,7 +44,7 @@ fn void parse_fn_call()
 	`);
 	Call* call = unwrap_call(unwrap_nth(ast.expressions, 0));
 	assert_ident(call.callee, "sub");
-	assert_ident(unwrap_nth(call.args, 0), "b");
+	assert_ambiguous_ident(unwrap_nth(call.args, 0), "b");
 	assert_int(unwrap_nth(call.args, 1), 2);
 }
 // /* Shell style */
