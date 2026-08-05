@@ -640,7 +640,7 @@ fn Expr*? Parser.parse_lambda(&self)
 		}
 	}
 
-	Expr* body = self.parse_block_body(self.cursor.peek().span)!;
+	Expr* body = self.parse_sequence(self.cursor.peek().span)!;
 	return expr::@new(LITERAL,
 		{
 			.type = Type.FN,

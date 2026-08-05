@@ -43,35 +43,32 @@ import cyqra::sema::types;
 
 enum ExprKind: (String field) {
 	LITERAL {"literal"},
-	VARIABLE {"variable"},
-	EXTERNAL {"external"},
-	PREFIX {"prefix"},
-	POSTFIX {"postfix"},
-	INFIX {"infix"},
 	FUNCTION {"fun"},
 	CALL {"call"},
 	INDEX {"idx"},
 	FIELD {"field"},
 	BINDING {"bnd"},
-	// BLOCK ,
 	RETURN {"ret"},
 	PIPELINE {"ppln"},
-	// COLLECT,
+
 	SEQUENCE {"seq"},
 	FLAT_SEQUENCE {"fseq"},
 	AMBIGUOUS_IDENT {"amb_ident"},
 	IN {"in"},
 	OPERATOR {"op"},
 	IDENTIFIER {"ident"},
+	
+	VARIABLE {"variable"},
+	EXTERNAL {"external"},
+	PREFIX {"prefix"},
+	POSTFIX {"postfix"},
+	INFIX {"infix"},
+	
+	// COLLECT,
 }
 
 union ExprDefs {	
 	Literal literal;
-	Operator op;
-	Identifier ident;
-	AmbiguousIdent amb_ident;
-	Sequence seq;
-	FlatSequence fseq;
 	Call call;
 	Index idx;
 	Field field;
@@ -79,14 +76,21 @@ union ExprDefs {
 	Function fun;
 	Return ret;
 	Pipeline ppln;
-	InKw in;
-	
+
+	InKw in;	
+	Operator op;
+	Identifier ident;
+	AmbiguousIdent amb_ident;
+	Sequence seq;
+	FlatSequence fseq;
+
 	Variable variable;
 	External external;
 	Prefix prefix;
 	Postfix postfix;
 	Infix infix;
-	Collect collect;
+
+	// Collect collect;
 }
 
 typedef InKw = bool;
@@ -148,8 +152,8 @@ enum StrKind { STATIC, DYNAMIC }
 struct LiteralString {
 	StrKind kind;
 	union {
-		String static_str;
-		List{ StringPart } dyn_str;
+		String stc;
+		List{ StringPart } dyn;
 	}
 }
 
@@ -162,7 +166,7 @@ alias LiteralAtom = String;
 
 /* --- */
 
-<* Sequence of expressions *>
+<* Sequence of expressions, defined in a separate scope *>
 alias Sequence = List{ Expr* };
 <* Sequence of flatenned, leaf nodes that needs folding *>
 alias FlatSequence = Sequence;

@@ -3,7 +3,7 @@ import std::collections::list;
 
 import cyqra::lexer::token;
 import cyqra::lexer::span;
-import std::io;
+
 enum CursorMode
 {
 	<* skip white spaces and terminators *>

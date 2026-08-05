@@ -186,7 +186,7 @@ macro void? Parser.parse_statement_list(&self, List{ Expr* }* stmts, ...)
 	);
 }
 
-fn Expr*? Parser.parse_block_body(&self, Span start)
+fn Expr*? Parser.parse_sequence(&self, Span start)
 {
 	List{ Expr* } stmts; stmts.init(mem);
 	self.parse_statement_list(&stmts, CLOSED_BRACE)!;
@@ -206,7 +206,7 @@ fn Expr*? Parser.parse_block_body(&self, Span start)
 fn Expr*? Parser.parse_block(&self)
 {
 	Span start = self.cursor.advance().span;
-	return self.parse_block_body(start);
+	return self.parse_sequence(start);
 }
 
 fn void? Parser.parse_parameters(&self, List{ TypedIdent }* params)
@@ -265,7 +265,7 @@ fn Expr*? Parser.parse_function(&self)
 		return ast::INVALID_EXPRESSION~;
 	}
 	
-	Expr* body = self.parse_block_body(self.cursor.peek().span)!;
+	Expr* body = self.parse_sequence(self.cursor.peek().span)!;
 	Expr* fun = expr::@new(FUNCTION,
 		{ ti, params, body },
 		self.stmt_span(start)

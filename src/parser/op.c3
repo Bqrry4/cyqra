@@ -21,7 +21,7 @@ enum Fixity {
 	INFIX
 }
 
-enum Operator: (Fixity fx, Precedence prec, Associativity as)
+enum Operator : char (Fixity fx, Precedence prec, Associativity as)
 {
     INVALID { NONE, 0, NONE },
 

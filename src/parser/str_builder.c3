@@ -5,15 +5,15 @@ import std::collections::list;
 import std::io;
 
 struct LiteralStringBuilder {
-	String static_str;
-	List{ StringPart } dyn_str;
+	String stc;
+	List{ StringPart } dyn;
 	Span pending;
 }
 
 fn void LiteralStringBuilder.push_text(&self, StringPart part)
 {
-	if (!self.dyn_str.len() && !self.static_str.len) {
-		self.static_str = part.text;
+	if (!self.dyn.len() && !self.stc.len) {
+		self.stc = part.text;
 		return;
 	}
 	push_dynamic(self, part);
@@ -24,24 +24,24 @@ fn void LiteralStringBuilder.push_interp(&self, StringPart part) => push_dynamic
 fn void push_dynamic(LiteralStringBuilder* self, StringPart part) @local
 {
 	//@ Promote it to dynamic
-	if (!self.dyn_str.len()) {
-		self.dyn_str.init(mem);
-		if (self.static_str.len) self.dyn_str.push({ .kind = TEXT, .text = self.static_str });
+	if (!self.dyn.len()) {
+		self.dyn.init(mem);
+		if (self.stc.len) self.dyn.push({ .kind = TEXT, .text = self.stc });
 	}
-	self.dyn_str.push(part);
+	self.dyn.push(part);
 }
 
 fn void LiteralStringBuilder.push(&self, StringPart part)
 {
-	if (!self.dyn_str.len() && part.kind == TEXT && !self.static_str.len) {
-		self.static_str = part.text;
+	if (!self.dyn.len() && part.kind == TEXT && !self.stc.len) {
+		self.stc = part.text;
 		return;
 	}
-	if (!self.dyn_str.len()) {
-		self.dyn_str.init(mem);
-		if (self.static_str.len) self.dyn_str.push({ .kind = TEXT, .text = self.static_str });
+	if (!self.dyn.len()) {
+		self.dyn.init(mem);
+		if (self.stc.len) self.dyn.push({ .kind = TEXT, .text = self.stc });
 	}
-	self.dyn_str.push(part);
+	self.dyn.push(part);
 }
 <*
 	Extending a string, when it is composed from multiple tokens. 
@@ -59,6 +59,6 @@ fn void LiteralStringBuilder.flush(&self)
 fn LiteralString LiteralStringBuilder.finish(&self)
 {
 	self.flush();
-	if (self.dyn_str.len()) return { .kind = DYNAMIC, .dyn_str = self.dyn_str };
-	return { .kind = STATIC, .static_str = self.static_str };
+	if (self.dyn.len()) return { .kind = DYNAMIC, .dyn = self.dyn };
+	return { .kind = STATIC, .stc = self.stc };
 }
