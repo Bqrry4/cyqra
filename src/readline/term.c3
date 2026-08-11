@@ -21,8 +21,8 @@ fn void Terminal.enable_raw(&self)
 	raw.c_lflag.icanon = false;
 	raw.c_lflag.iexten = false;
 	
-	raw.c_cc[Cc.VMIN]  = (Cc)1;
-	raw.c_cc[Cc.VTIME] = (Cc)0;
+	raw.c_cc[Control_Char.VMIN]  = (Cc)1;
+	raw.c_cc[Control_Char.VTIME] = (Cc)0;
 
     raw.set_attr(libc::STDIN_FD, TCSAFLUSH);
 }

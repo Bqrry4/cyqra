@@ -1,73 +1,112 @@
 module cyqra::parser::cursor;
 import std::collections::list;
-import std::io;
 
 import cyqra::lexer::token;
+import cyqra::lexer::span;
+
+enum CursorMode
+{
+	<* skip white spaces and terminators *>
+	NORMAL,
+	<* skip white spaces, keep '\n' and ';' *>
+	KEEP_SEP,
+	<* don't skip *>
+	RAW,
+}
 
 struct Cursor
 {
-	List{ Token } tokens;
-
-	usz start;
-	usz current;
+	Token[] tokens;
+	sz current;
 }
 
-fn void Cursor.reset(&self)
-{
-	self.start = 0;
-	self.current = 0;
-}
+fn void Cursor.reset(&self) => self.current = 0;
 
+<*
+	@return ```
+		Sentinel token, defined as:
+		kind: EOF
+		span.column: last.column + 1
+		span.slice: empty slice positioned at the end of the last token
+			ptr: &last.span.slice[len]
+			length: 0
+	```
+	@require self.tokens.len > 0 : "empty token source"
+*>
 fn Token Cursor.sentinel_token(&self)
 {
-	Token tk = self.tokens.last()!!;
-	tk.kind = EOF;
-	tk.column++;
-	tk.slice = tk.slice[:0];
-	return tk;
+	Token eot = self.tokens[^1];
+	eot.kind = EOF;
+	
+	Span* span = &eot.span;
+	span.column += span.slice.len;
+	span.slice = (String)(span.slice.ptr + span.slice.len)[:0];
+
+	return eot;
 }
 
-fn Token Cursor.advance(&self, bool skip_lf = true)
+fn Token Cursor.advance(&self)
 {
-	self.skip_spaces(skip_lf);		
+	self.skip(keep_sep: false);		
 	if (self.eot()) return self.sentinel_token();
 	return (self.tokens[self.current++]);
 }
-fn Token Cursor.peek(&self, bool skip_wp = true, bool skip_lf = true)
+
+macro Token Cursor.advance_check(&self, TokenKind ...expect)
 {
-	if (skip_wp) self.skip_spaces(skip_lf);
+	TokenKind tk = self.peek(RAW).kind;
+	bool matches = false;
+	foreach (exp: expect) {
+		matches = matches || (tk == exp);
+	}
+	assert(matches);
+	return self.advance();
+}
+
+macro Token Cursor.peek(&self, CursorMode mode = NORMAL)
+{
+	if (mode != RAW) self.skip(mode == KEEP_SEP);
 	if(self.eot()) return self.sentinel_token();
 	return (self.tokens[self.current]);
 }
-fn bool Cursor.eot(&self) => self.current >= self.tokens.len(); 
+fn bool Cursor.eot(&self) => self.current >= self.tokens.len; 
 
 <*
-	@consume "To consume the token on match"
+	Consumes the token on match
 *>
-fn bool Cursor.follows(&self, TokenKind expect, bool consume = true, bool skip_wp = true, bool skip_lf = true)
-{
-	Token tk = self.peek(skip_wp, skip_lf);
-	bool matches = tk.kind == expect;
-	matches && consume && ++self.current;
+macro bool Cursor.follows(&self,
+	TokenKind $expect, CursorMode $mode = NORMAL
+){
+	$switch $expect:
+		$case SPACE:
+			$mode = CursorMode.RAW;
+		$case NEW_LINE:
+			$mode = CursorMode.KEEP_SEP;
+	$endswitch
+
+	Token tk = self.peek($mode);
+	bool matches = tk.kind == $expect;
+	matches && ++self.current;
 	return matches;
-} 
-
-fn void Cursor.skip_spaces(&self, bool skip_lf = true)
-{
-	while (
-		!self.eot() &&
-		(
-			(self.tokens[self.current].kind == TokenKind.SPACE) ||
-			(skip_lf && (self.tokens[self.current].kind == TokenKind.NEW_LINE))
-		)
-	) {
-		self.current++;
-	};
 }
+fn bool Cursor.match(&self,
+	TokenKind expect, CursorMode mode = NORMAL
+) =>  self.peek(mode).kind == expect;
 
-fn String Cursor.expr_span(&self)
+<*
+	Skips new lines, spaces and semicolon
+	@keep_sep "Will skip only spaces"
+*>
+fn void Cursor.skip(&self, bool keep_sep = false)
 {
-	String left = self.tokens[self.start].slice;
-	String right = self.tokens[self.current - 1].slice;
-	return (String)left.ptr[:(right.ptr - left.ptr) + right.len];	
+	while (!self.eot()) {
+		TokenKind kind = self.tokens[self.current].kind;
+		bool is_space = kind == SPACE;
+		bool is_separator = kind == NEW_LINE
+							|| kind == SEMICOLON;
+		if (!is_space && (keep_sep || !is_separator)) {
+			break;
+		}
+		self.current++;
+	}
 }

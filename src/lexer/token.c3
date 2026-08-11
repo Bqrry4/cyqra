@@ -1,62 +1,58 @@
 module cyqra::lexer::token;
+import cyqra::lexer::span;
 
 enum TokenKind : int @public
 {
-     RAW,
+    /* Operators */
+	PLUS, MINUS,
+	EXCLAMATION,
+    STAR, STARX2,
+    SLASH, SLASHX2, PERCENT,
+	LT, LTE, GT, GTE,
+	EQ, NEQ, EQX2,
+	PLUS_EQ, MINUS_EQ,
+    STAR_EQ, SLASH_EQ,
+	AMP, AMPX2,
+	PIPE, EXCL_PIPE,
+	PIPE_AMP, PIPEX2,
+	DOT, DOTX2, DOTX3,
+	ASPERAND,
+         
+    /* Brackets */
+    OPEN_PARENTHESIS, CLOSED_PARENTHESIS,
+    OPEN_BRACE, CLOSED_BRACE,
+    OPEN_BRACKET, CLOSED_BRACKET,
 
-     /* Operators */
-     PLUS, MINUS,
-     EXCLAMATION,
-     PLUS_PLUS, MINUS_MINUS,
-     STAR_STAR,
-     STAR, SLASH, SLASH_SLASH, PERCENT,
-     SHL, SHR,
-     LT, LTE, GT, GTE,
-     EQ, NEQ,
-     L_AND, L_OR,
-     PIPE, PIPE_ALL,
-     DOT, DOTX2, DOTX3,
+    /* literals */
+    INTEGER, FLOAT,
 
-     ASGN,
-     PLUS_ASGN, MINUS_ASGN,
-     STAR_ASGN, SLASH_ASGN,
-     
-     /* Brackets */
-     OPEN_PHARANTESIS, CLOSED_PHARANTESIS,
-     OPEN_BRACE, CLOSED_BRACE,
-     OPEN_BRACKET, CLOSED_BRACKET,
+    IDENTIFIER,
+    COLON, SEMICOLON, COMMA,
+    NEW_LINE, SPACE,
 
-     /* literals */
-     INTEGER, FLOAT,
-     STRING,
+    /* keywords */
+    LET, MUT, ENV,
+    IF, ELSE, WHILE,
+    FN, RETURN,
+	IN,
 
-     IDENTIFIER,
-
-     SEMICOLON, COMMA,
-
-     NEW_LINE, SPACE,
-
-     /* keywords */
-     LET, MUT, ENV,
-     IF, ELSE, WHILE,
-     FN, RETURN,
-
-     /* string */
-     D_QUOTES, DOLLAR_SIGN,
-     STRING_PART, ESCAPED_CHAR,
-     INTERP_START, INTERP_END,
-     INTERP_IDENT,        
-     EOF,
+	/* types */
+	INT, LIST, RECORD, STREAM,
+	
+    /* string */
+    D_QUOTES, DOLLAR_SIGN,
+    TEXT, ESCAPED_CHAR,
+    INTERP_START, INTERP_END,
+    INTERP_IDENT,
+             
+    /* special */
+    EOF,
+    RAW,
 }
-
-
+ 
 struct Token
 {
-     TokenKind kind;
-     <* Represents a slice over the input source *>
-     String slice;
-
-     uint line;
-     uint column;
+	TokenKind kind;
+	Span span;
 }
 

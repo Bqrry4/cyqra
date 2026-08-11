@@ -21,8 +21,6 @@ struct LexContext
 
 struct Lexer
 {
-     Allocator allocator;
-
      String source;
      List{ Token } output;
 
@@ -30,18 +28,17 @@ struct Lexer
      List{ LexContext } ctxs;
 }
 
-fn Lexer new(Allocator allocator) @public
+fn Lexer new() @public
 {
      List{ Token } tokens;
-     tokens.init(allocator);
+     tokens.init(mem);
      List{ LexContext } ctxs;
-     ctxs.init(allocator);
+     ctxs.init(mem);
      ctxs.push({
           .mode = DEFAULT
      });
      
      return {
-          .allocator = allocator,
           .output = tokens,
           .ctxs = ctxs
      };
@@ -100,12 +97,9 @@ fn List{ Token } Lexer.analyze(&self, String source)
  
 fn void Lexer.emit(&self, TokenKind kind)
 {
-     String lexeme = self.cursor.captured();
      self.output.push({
           .kind = kind,
-          .slice = lexeme,
-          .line = self.cursor.line,
-          .column = self.cursor.column
+          .span = self.cursor.captured_span()
      });
 
      self.cursor.sync_start();
@@ -127,30 +121,31 @@ fn void? Lexer.next_token(&self)
 fn void? Lexer.lex_code(&self, char c)
 {
      switch(c) {
-          case '+': self.cursor.follows('+') ? self.emit(PLUS_PLUS)
-                    : self.cursor.follows('=') ? self.emit(PLUS_ASGN)
+          case '+' : self.cursor.follows('=') ? self.emit(PLUS_EQ)
                                              : self.emit(PLUS);
-          case '-': self.cursor.follows('-') ? self.emit(MINUS_MINUS)
-                    : self.cursor.follows('=') ? self.emit(MINUS_ASGN)
+          case '-' : self.cursor.follows('=') ? self.emit(MINUS_EQ)
                                         : self.emit(MINUS);
-          case '*': self.cursor.follows('*') ? self.emit(STAR_STAR)
-                    : self.cursor.follows('=') ? self.emit(STAR_ASGN)
+          case '*': self.cursor.follows('*') ? self.emit(STARX2)
+                    : self.cursor.follows('=') ? self.emit(STAR_EQ)
                                         : self.emit(STAR);
-          case '/': self.cursor.follows('=') ? self.emit(SLASH_ASGN)
+          case '/': self.cursor.follows('/') ? self.emit(SLASHX2)
+                    : self.cursor.follows('=') ? self.emit(SLASH_EQ)
                                       : self.emit(SLASH);
           case '%': self.emit(PERCENT);
-          case '|': self.cursor.follows('@') ? self.emit(PIPE_ALL)
+          case '|': self.cursor.follows('&') ? self.emit(PIPE_AMP)
                                       : self.emit(PIPE);
+          case '&': self.emit(AMP);
           case '<': self.cursor.follows('=') ? self.emit(LTE)
                                       : self.emit(LT);
           case '>': self.cursor.follows('=') ? self.emit(GTE)
                                       : self.emit(GT);
-          case '=': self.cursor.follows('=') ? self.emit(ASGN)
+          case '=': self.cursor.follows('=') ? self.emit(EQX2)
                                       : self.emit(EQ);
-          case '!': self.cursor.follows('=') ? self.emit(NEQ)
+          case '!': self.cursor.follows('|') ? self.emit(EXCL_PIPE)
+                    : self.cursor.follows('=') ? self.emit(NEQ)
                                       : self.emit(EXCLAMATION);
-          case '(': self.emit(OPEN_PHARANTESIS);
-          case ')': self.emit(CLOSED_PHARANTESIS);
+          case '(': self.emit(OPEN_PARENTHESIS);
+          case ')': self.emit(CLOSED_PARENTHESIS);
           case '[': self.emit(OPEN_BRACKET);
           case ']': self.emit(CLOSED_BRACKET);
           case '{': {
@@ -174,6 +169,7 @@ fn void? Lexer.lex_code(&self, char c)
 
                self.ctx().interp.brace_depth--;
           }
+          case ':': self.emit(COLON);
           case ';': self.emit(SEMICOLON);
           case ',': self.emit(COMMA);
           case '.': self.cursor.follows('.') ?
@@ -184,7 +180,8 @@ fn void? Lexer.lex_code(&self, char c)
                self.ctxs.switch_to(STRING);              
                self.emit(D_QUOTES);
           }
-          case '#': self.lex_comment();                    
+          case '@': self.emit(ASPERAND);
+          case '#': self.lex_comment();
           default: switch {
                case ascii::is_space(c): self.lex_space(c);
                case ascii::is_digit(c): self.lex_number();
@@ -219,7 +216,10 @@ fn void? Lexer.lex_text(&self, char c)
                if (is_identifier_char(self.cursor.peek())) {     
                     self.emit(INTERP_IDENT);
                     self.lex_identifier();
-               }                 
+                    break;
+               }
+               // treat it as normal text then
+               nextcase default;
           }
           case ' ':
           case '\n': {
@@ -239,7 +239,6 @@ fn void? Lexer.lex_text(&self, char c)
 fn bool Lexer.is_string_breaker(&self)
 {
      char c = self.cursor.peek();
-
      // Only a breaker when there's a possible identifier or start of a block" 
      if (c == '$') {
           char sc = self.cursor.peek(1);
@@ -247,10 +246,10 @@ fn bool Lexer.is_string_breaker(&self)
      }
 
      if (self.ctx().mode == RAW) {
-          return ascii::is_space(c);          
+          return !c || ascii::is_space(c);          
      }
      
-     return c == '\\' || c == '"'; 
+     return !c || c == '\\' || c == '"'; 
 }
 
 fn bool is_identifier_char(char c)
@@ -264,7 +263,7 @@ fn void? Lexer.lex_string_text(&self)
 
      self.emit((self.ctx().mode == RAW)
           ? TokenKind.RAW
-          : TokenKind.STRING_PART
+          : TokenKind.TEXT
      );
 }
 
@@ -309,5 +308,9 @@ fn void Lexer.lex_identifier(&self)
 
 fn void Lexer.lex_comment(&self)
 {
-     while(self.cursor.peek() != '\n') self.cursor.advance();
+     while (true) {
+          char c = self.cursor.peek();
+          if (!c || c == '\n') break;
+          self.cursor.advance();
+     }
 }

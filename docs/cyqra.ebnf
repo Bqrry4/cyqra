@@ -23,7 +23,7 @@ comment = "#" , ? any-char ? , "\n";
 
 identifier = letter , { letter | digit | "_" };
 
-binding = ("let" | "mut" | "env" | "alias") , identifier , "=" , (expression | block);
+binding = ("let" | "mut" | "env") , identifier , "=" , (expression | block);
 
 (*
 	) -> enclosed in a sub_expression
@@ -39,15 +39,19 @@ sub_expression = "(" , expression , ")";
 expression_list = expression , { "," , expression };
 
 shell_cmd = identifier; (* when identifier is not present in the scope *)
-shell_arg = ?? anything between spaces ?? ;
+shell_arg = ?? anything between spaces ??
+			| sub_expression ;
 shell_call = shell_cmd , { " " , shell_arg };
-
 fn_call = "(" , [ expression_list ] , ")";
 
-array = "[" , [ expression_list ] , "]";
-record = ;
-indexing = "[" , expression , "]";
+record_entry = ( identifier | string ) , ":",  expression ;
+record_entry_list = record_entry , { ("," | "\n") , record_entry };  
 
+array = "[" , [ expression_list ] , "]";
+record =  "{" , [ record_entry_list ] , "}";
+indexing = "[" , expression , "]";
+dot_access = "." , identifier;
+ 
 expr_head = literal
 		  | identifier (* when identifier is a variable in the scope *)
 		  | shell_call
@@ -55,13 +59,15 @@ expr_head = literal
 		  | array
 		  | prefix_op , expression
 		  ;
-
 expr_tail = postfix_op
 			| infix_op , expression
-			| fn_call
-			| indexing
+			| suffix
 			;
-
+suffix = fn_call
+		 | indexing
+		 | dot_access
+		 ;
+		
 prefix_op  = "+" | "-" | "++" | "--" ;
 postfix_op = "++" | "--" ;
 infix_op   = "**"
@@ -81,7 +87,7 @@ assignment_op = "="
 				| "*=" | "/="
 				;
 
-stmt = ( binding | assignment | return | expression );	
+stmt = ( binding | assignment | return | expression | block );	
 stmt_separator = ";" | "\n";
 
 stmt_list = stmt , { stmt_separator , stmt };
@@ -93,4 +99,7 @@ return = "return" , expression;
 lambda = "{" , "|" , [ parameters ]  , "|" , stmt_list , "}";
 parameters = identifier , { "," , identifier };
 
-program = { function | block | stmt_list };
+any_call = "@" , primary , { suffix }, { "  " , shell_arg };
+
+program = { function | stmt_list };
+

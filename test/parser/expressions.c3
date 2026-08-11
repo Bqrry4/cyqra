@@ -1,35 +1,156 @@
 module cyqra::parser @test;
+import std::io;
+import cyqra::ast;
 
-fn void parse_infix()
+// --- literals ---
+fn void parse_int()
+{
+	Ast ast = parse(`
+		1
+	`);
+	assert_int(
+		unwrap_nth(ast.expressions, 0),
+		1
+	);
+}
+fn void parse_float()
+{
+	Ast ast = parse(`
+		3.6
+	`);
+	assert_float(
+		unwrap_nth(ast.expressions, 0),
+		3.6
+	);
+}
+fn void parse_atom()
+{
+	Ast ast = parse(`
+		:err
+	`);
+	assert_atom(
+		unwrap_nth(ast.expressions, 0),
+		"err"
+	);
+}
+// --- fseq ---
+fn void parse_fseq_infix()
+{
+	Ast ast = parse(`
+		1 + 2
+	`);
+	FlatSequence* fseq = unwrap_fseq(unwrap_nth(ast.expressions, 0));
+	assert(fseq.len() == 3);
+	assert_int(fseq.[0], 1);
+	assert_op(fseq.[1], Operator.ADD);
+	assert_int(fseq.[2], 2);
+}
+
+fn void parse_fseq_mixed()
+{
+	Ast ast = parse(`
+		!a() + 2 * -3 &
+	`);
+	FlatSequence* fseq = unwrap_fseq(unwrap_nth(ast.expressions, 0));
+	assert(fseq.len() == 8);
+	assert_op(fseq.[0], NOT);
+	assert_ident(unwrap_call(fseq.[1]).callee, "a");
+	assert_op(fseq.[2], ADD);
+	assert_int(fseq.[3], 2);
+	assert_op(fseq.[4], MUL);
+	assert_op(fseq.[5], NEG);
+	assert_int(fseq.[6], 3);
+	assert_op(fseq.[7], EXEC_ASYNC);
+}
+
+// --- pipelines ---
+fn void parse_pipeline()
 {
     Ast ast = parse(`
-		3 + 6
+        a | b | c
     `);
-    Infix* infix = unwrap_infix(unwrap_nth(ast.expressions, 0), PLUS);
-    assert_token(unwrap_primary(infix.lhs), "3");
-    assert_token(unwrap_primary(infix.rhs), "6");
+    Pipeline* ppln = unwrap_pipeline(ast.expressions[0]);
+    assert(ppln.links.len() == 2);
+
+	assert_ambiguous_ident(ppln.links[0].expr, "a");
+    assert(ppln.links[0].mode == OUT);
+
+	assert_ambiguous_ident(ppln.links[1].expr, "b");
+    assert(ppln.links[1].mode == OUT);
+	// 'c' doesn't continue with a space
+	assert_ambiguous_ident(ppln.tail, "c");
 }
 
-fn void parse_precedence()
+fn void parse_pipeline_mixed()
 {
-    // 1 + 2 * 3  →  1 + (2 * 3)
     Ast ast = parse(`
-        1 + 2 * 3
+        a | b |& c !| d
     `);
-    Infix* add = unwrap_infix(unwrap_nth(ast.expressions, 0), PLUS);
-    assert_token(unwrap_primary(add.lhs), "1");
+    Pipeline* ppln = unwrap_pipeline(ast.expressions[0]);
+	assert(ppln.links.len() == 3);
 
-    Infix* mul = unwrap_infix(add.rhs, STAR);
-    assert_token(unwrap_primary(mul.lhs), "2");
-    assert_token(unwrap_primary(mul.rhs), "3");
+	assert_ambiguous_ident(ppln.links[0].expr, "a");
+    assert(ppln.links[0].mode == OUT);
+
+	assert_ambiguous_ident(ppln.links[1].expr, "b");
+    assert(ppln.links[1].mode == OUT_ERR);
+	
+	assert_ambiguous_ident(ppln.links[2].expr, "c");
+    assert(ppln.links[2].mode == ERR);
+
+	assert_ambiguous_ident(ppln.tail, "d");
 }
 
-fn void parse_nested()
+// --- any-call ---
+
+fn void parse_any_call_normal()
 {
-    Ast ast = parse("1 + (2 + 3)");
-    Infix* outer = unwrap_infix(unwrap_nth(ast.expressions, 0), PLUS);
-    assert_token(unwrap_primary(outer.lhs), "1");
-    Infix* inner = unwrap_infix(outer.rhs, PLUS);
-    assert_token(unwrap_primary(inner.lhs), "2");
-    assert_token(unwrap_primary(inner.rhs), "3");
+	//@ if `echo` is an external or of Fn type,
+	// prepeding the `@` operator should parse the same as without it.
+	// The only difference is, this is set at parse time and checked in the sema,
+	// and the bare one is resolved directly in the sema.
+	// Using it might just help with visibility when indended.
+	Ast ast = parse(`
+		@echo b c
+    `);
+	Call* call = unwrap_call(ast.expressions[0]);
+	assert_ident(call.callee, "echo");
+	assert_static_string(call.args[0], "b");
+	assert_static_string(call.args[1], "c");
 }
+fn void parse_any_call_head_call()
+{
+	Ast ast = parse(`
+		@ echo("ls") -all
+    `);
+
+	Call* any_call = unwrap_call(ast.expressions[0]);
+	Call* call = unwrap_call(any_call.callee);
+
+	assert_ident(call.callee, "echo");
+	assert_static_string(call.args[0], "ls");
+
+	assert_static_string(any_call.args[0], "-all");
+}
+fn void parse_any_call_head_field_access()
+{
+	Ast ast = parse(`
+		@ a.b c
+    `);
+	Call* call = unwrap_call(ast.expressions[0]);
+	Field* field = unwrap_field(call.callee);
+	assert_ident(field.object, "a");
+	assert(field.name == "b");
+	assert_static_string(call.args[0], "c");
+}
+fn void parse_any_call_head_string()
+{
+	Ast ast = parse(`
+		@"fastfetch" b c
+    `);
+	Call* call = unwrap_call(ast.expressions[0]);
+	assert_static_string(call.callee, "fastfetch");
+	assert_static_string(call.args[0], "b");
+	assert_static_string(call.args[1], "c");
+}
+

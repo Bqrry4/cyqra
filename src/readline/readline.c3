@@ -50,6 +50,7 @@ fn Event parse_event(char[] buf)
     char c = buf[0];
     switch (c) {
 		case '\r':  return { .kind = ENTER };
+		case '\n': return {.kind = ENTER };
         case '\t':  return { .kind = TAB };
         case 0x7f:  return { .kind = BACKSPACE };
         // escape sequence
@@ -96,9 +97,9 @@ struct Reader
 	LineBuffer line_buffer;
 }
 
-fn Reader new(Allocator allocator) @public => {
+fn Reader new() => {
 	.poll = poll::new(),
-	.line_buffer = line_buffer::new(allocator)
+	.line_buffer = line_buffer::new(mem)
 };
 
 fn void Reader.free(&self)

@@ -1,103 +1,102 @@
 module cyqra::parser::op;
 import std::collections::enummap;
 import std::collections::maybe;
+import std::collections::pair;
 
 import cyqra::lexer::token;
 
-alias _Operator_ = Maybe{ Operator };
-alias Precedence = uint;
+faultdef NOT_ALLOWED;
 
-enum Typefix
+alias Precedence = uint;
+enum Associativity
 {
+	NONE,
+	LEFT, RIGHT
+}
+
+enum Fixity {
+	NONE,
 	PREFIX,
 	POSTFIX,
 	INFIX
 }
-enum Associativity
+
+enum Operator : char (Fixity fx, Precedence prec, Associativity as)
 {
-	LEFT, RIGHT
-}
+    INVALID { NONE, 0, NONE },
 
-struct Operator
-{
-    Precedence prec;
-    // Typefix of;
-    Associativity as;
-}
-
-struct OperatorDef
-{	
-	EnumMap{ TokenKind, _Operator_ } prefix_ops;
-	EnumMap{ TokenKind, _Operator_ } postfix_ops;
-	EnumMap{ TokenKind, _Operator_ } infix_ops;
-}
-
-fn OperatorDef new() {
+    POS {PREFIX, 15, RIGHT},
+	NEG {PREFIX, 15, RIGHT},
+	NOT {PREFIX, 15, RIGHT},
+	ANY_CALL {PREFIX, 15, RIGHT},
 	
-	EnumMap{ TokenKind, _Operator_ } prefix_ops;
-	prefix_ops.init(maybe::EMPTY);
-	EnumMap{ TokenKind, _Operator_ } postfix_ops;
-	postfix_ops.init(maybe::EMPTY);
-	EnumMap{ TokenKind, _Operator_ } infix_ops;
-	infix_ops.init(maybe::EMPTY);
+	EXEC_ASYNC {POSTFIX, 3, LEFT},
 
-	postfix_ops[OPEN_PHARANTESIS] = maybe::value({15, LEFT});
-	postfix_ops[OPEN_BRACKET] = maybe::value({15, LEFT});
-	postfix_ops[DOT] = maybe::value({15, LEFT});
-	postfix_ops[PLUS_PLUS] = maybe::value({15, LEFT});
-	postfix_ops[MINUS_MINUS] = maybe::value({15, LEFT});
-	postfix_ops[EXCLAMATION] = maybe::value({16, LEFT});
+    ADD {INFIX, 11, LEFT},
+	SUB {INFIX, 11, LEFT},
+	MUL {INFIX, 12, LEFT},
+	DIV {INFIX, 12, LEFT},
+	MOD	{INFIX, 12, LEFT},
+	FLOOR_DIV {INFIX, 12, LEFT},
+	POW {INFIX, 13, RIGHT},
+	EQ  {INFIX, 5, LEFT},
+	NEQ {INFIX, 5, LEFT},
+	LT  {INFIX, 5, LEFT},
+	GT  {INFIX, 5, LEFT},
+	LTE {INFIX, 5, LEFT},
+	GTE {INFIX, 5, LEFT},
+	ASGN     {INFIX, 1, RIGHT},
+	ADD_ASGN {INFIX, 1, RIGHT},
+	SUB_ASGN {INFIX, 1, RIGHT},
+	MUL_ASGN {INFIX, 1, RIGHT},
+	DIV_ASGN {INFIX, 1, RIGHT},
 
-	prefix_ops[PLUS] = maybe::value({14, RIGHT});
-	prefix_ops[MINUS] = maybe::value({14, RIGHT});
-	prefix_ops[PLUS_PLUS] = maybe::value({14, RIGHT});
-	prefix_ops[MINUS_MINUS] = maybe::value({14, RIGHT});
-	prefix_ops[EXCLAMATION] = maybe::value({14, RIGHT});
-
-
-	infix_ops[STAR_STAR] = maybe::value({13, LEFT});
-	infix_ops[STAR] = maybe::value({12, LEFT});
-	infix_ops[SLASH] = maybe::value({12, LEFT});
-	infix_ops[PERCENT] = maybe::value({12, LEFT});
-	infix_ops[PLUS] = maybe::value({11, LEFT});
-	infix_ops[MINUS] = maybe::value({11, LEFT});
-
-	return {
-		.prefix_ops = prefix_ops,
-		.postfix_ops = postfix_ops,
-		.infix_ops = infix_ops	
-	};
+	PIPE     {INFIX, 2, LEFT},
+	PIPE_ERR {INFIX, 2, LEFT},
+	PIPE_ALL {INFIX, 2, LEFT},
 }
 
-fn Precedence? OperatorDef.check_prefix_op(&self, TokenKind tk)
+fn Operator to_prefix(TokenKind tk)
 {
-	_Operator_ maybe_op = self.prefix_ops[tk];
-	if (!maybe_op.has_value) return NOT_FOUND~;
-	Operator op = maybe_op.value;
-	return op.prec;
-}
-
-fn Precedence? OperatorDef.check_postfix_op(&self, TokenKind tk)
-{
-	_Operator_ maybe_op = self.postfix_ops[tk];
-	if (!maybe_op.has_value) return NOT_FOUND~;
-	Operator op = maybe_op.value;
-	return op.prec;
-}
-
-fn Precedence? OperatorDef.check_infix_op(&self, TokenKind tk, Precedence prec)
-{
-	_Operator_ maybe_op = self.infix_ops[tk];
-	if (!maybe_op.has_value) return NOT_FOUND~;
-	
-	Operator op = maybe_op.value;
-	bool is_higher = op.prec > prec;
-	bool is_right = op.as == Associativity.RIGHT;
-	bool is_equal = op.prec == prec;
-
-	if (is_higher || (is_right && is_equal)) {
-		return op.prec;	
+	switch (tk) {
+	case PLUS: return POS;
+	case MINUS: return NEG;
+	case EXCLAMATION: return NOT;
+	case ASPERAND: return ANY_CALL;
+	default: return INVALID;
 	}
-	
-	return NOT_FOUND~;
+}
+
+fn Operator to_postfix(TokenKind tk)
+{
+	switch (tk) {
+	case AMP: return EXEC_ASYNC;
+	default: return INVALID;
+	}
+}
+fn Operator to_infix(TokenKind tk)
+{
+	switch (tk) {
+	case STARX2: return POW;
+	case STAR: return MUL;
+	case SLASH: return DIV;
+	case SLASHX2: return FLOOR_DIV;
+	case PERCENT: return MOD;
+	case PLUS: return ADD;
+	case MINUS: return SUB;
+	case EQX2: return EQ;
+	case NEQ: return NEQ;
+	case LT: return LT;
+	case LTE: return LTE;
+	case GT: return GTE;
+	case EQ: return ASGN;
+	case PLUS_EQ: return ADD_ASGN;
+	case MINUS_EQ: return SUB_ASGN;
+	case STAR_EQ: return MUL_ASGN;
+	case SLASH_EQ: return DIV_ASGN;
+	case PIPE: return PIPE;
+	case EXCL_PIPE: return PIPE_ERR;
+	case PIPE_AMP: return PIPE_ALL;
+	default: return INVALID;
+	}
 }
