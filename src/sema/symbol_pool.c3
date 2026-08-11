@@ -55,6 +55,7 @@ fn void SymbolPool.free(&self)
 *>
 macro SymbolID SymbolPool.bind(&self, Type type, String name, #body = {}) @safemacro
 {
+	io::printn(name);
 	SymbolDef* def = alloc::new(self.alloc, SymbolDef, {
 		type,
 		name.copy(self.alloc),

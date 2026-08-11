@@ -97,7 +97,7 @@ struct Reader
 	LineBuffer line_buffer;
 }
 
-fn Reader new() @public => {
+fn Reader new() => {
 	.poll = poll::new(),
 	.line_buffer = line_buffer::new(mem)
 };

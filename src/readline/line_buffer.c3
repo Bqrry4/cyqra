@@ -9,7 +9,7 @@ struct LineBuffer
 }
 
 fn LineBuffer new(Allocator allocator) => {
-	.prompt = (DString){}.init(allocator)
+	.prompt = (DString){}.init(allocator, 64)
 };
 
 fn void LineBuffer.free(&self)

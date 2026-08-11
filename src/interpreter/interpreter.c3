@@ -1,4 +1,4 @@
-module cyqra::interpreter;
+module cyqra::interpreter @if(false);
 import std::io;
 import std::math;
 import std::collections::list;
@@ -6,7 +6,7 @@ import std::collections::map;
 import std::os::process;
 
 import cyqra::lexer::token;
-import cyqra::parser::ast;
+import cyqra::ast;
 import cyqra::diagnostic;
 import std::net::os;
 import std::os::posix;
@@ -23,54 +23,20 @@ faultdef
 		//! Temporary solution for the return from functions using faults
 		RETURN_STATEMENT;
 
-enum ValKind {
-	VAL,
-	REF
-}
-
-struct EValue {
-	ValKind kind;
-	union {
-		Value v;
-		Value* ref;
-	}
-}
-
-macro EValue val(Value value) => {
-	.kind = VAL,
-	.v = value
-};
-
-macro EValue ref(Value* ref) => {
-	.kind = REF,
-	.ref = ref
-};
-
-fn Value EValue.get(&self) {
-	if (self.kind == REF) {
-		return *self.ref;
-	}
-	return self.v;
-} 
-
 struct Interpreter
 {
-	Allocator allocator;
 	Scope* scope;
-
 	Diagnostic* diagnostic;
 
 	//! temporary solution
-	Value return_value;
+	Value* return_value;
 }
 
 fn Interpreter new(
-	Allocator allocator,
 	Diagnostic* diagnostic
 ){
-	Scope* scope = scope::new_ref(allocator);
+	Scope* scope = scope::new_ref(mem);
 	return {
-		.allocator = allocator,
 		.scope = scope,
 		.diagnostic = diagnostic
 	};
@@ -79,202 +45,209 @@ fn Interpreter new(
 fn void Interpreter.free(&self)
 {
 	self.scope.free();
-	alloc::free(self.allocator, self.scope);
+	alloc::free(mem, self.scope);
 }
 
 fn void Interpreter.interpret(&self, Ast ast)
 {
-	EValue last = val(value::UNIT);
+	Value* last = mem::@clone(value::UNIT);
 	foreach (expr: ast.expressions) {
 		if (catch err = @try(last, self.eval(expr))) {
 			io::printn(err);
 			io::printn(self.diagnostic);
 		}
 	}
-	if (last.get().kind != UNIT) {
-		String s_val = last.get().to_string(self.allocator);
+	if (last.kind != UNIT) {
+		String s_val = last.to_string(tmem);
 		io::printn(s_val);
-		s_val.free(self.allocator);
+		s_val.free(tmem);
 	}
 }
 
-fn EValue? Interpreter.eval(&self, Expr* expr)
+fn Value*? Interpreter.eval(&self, Expr* expr)
 {
 	switch (expr.kind) {
-		case PRIMARY: return self.eval_primary(expr);
+		case LITERAL: return self.eval_literal(expr);
 		case VARIABLE: return self.eval_variable(expr);
-		case STRINGLIT: return self.eval_string(expr);
+		// case STRINGLIT: return self.eval_string(expr);
 		// case PREFIX: return self.eval_prefix(expr);
 		// case POSTFIX: return self.eval_postfix(expr);
 		case INFIX: return self.eval_infix(expr);
 		case CALL: return self.eval_call(expr);
 		case INDEX: return self.eval_index(expr);
 		case BINDING: return self.eval_binding(expr);
-		case BLOCK: return self.eval_block(&expr.block);
+		// case BLOCK: return self.eval_block(&expr.block);
 		// case FUNCTION: return self.eval_fn(expr);
 		case RETURN: return self.eval_return(expr);
-		case ARRAY: return self.eval_array(expr);
-		case RECORD: return self.eval_record(expr);
+		// case ARRAY: return self.eval_array(expr);
+		// case RECORD: return self.eval_record(expr);
 		case PIPELINE: return self.eval_pipeline(expr);
 		default: io::printf("not implemented %s", expr.kind);
 	}
-	return val(value::UNIT);
+	return mem::@clone(value::UNIT);
 }
 
-fn EValue? Interpreter.eval_variable(&self, Expr* expr)
+fn Value*? Interpreter.eval_variable(&self, Expr* expr)
 {
 	Variable* v = &expr.variable;
 
-	Value*? val = self.scope.get_ref(v.id);
-	return ref(val);
+	Value*? val = self.scope.get(v.id);
+	return val;
 }
 
-fn EValue? Interpreter.eval_primary(&self, Expr* expr)
+fn Value*? Interpreter.eval_literal(&self, Expr* expr)
 {
-	Primary* p = &expr.primary;
+	Literal* l = &expr.literal;
 
-	String slice = p.token.span.slice;
-	TokenKind kind = p.token.kind;
-	switch (kind) {
-		case INTEGER: return val(value::_int(slice.to_long()!!));
-		case FLOAT: return val(value::_float(slice.to_double()!!));
-		default: unreachable("eval_primary: unexpected token kind '%s'", kind);
+	switch (l.type) {
+		case INT: return mem::@clone(value::_int(l._int));
+		case FLOAT: return mem::@clone(value::_float(l._float));
+		case STRING: return self.eval_string(l._string);
+		default: unreachable("unexpected literal");
 	}
 }
 
-fn EValue? Interpreter.eval_string(&self, Expr* expr)
+fn Value*? Interpreter.eval_string(&self, LiteralString lstr)
 {
-	StringLit* s = &expr.string;
-	DString dstring = (DString){}.init(self.allocator);
+	if (lstr.kind == STATIC) {
+		return mem::@clone((Value) {
+			.kind = STRING,
+			._string = lstr.static_str
+		});
+	}
 
-	foreach (part: s.parts) {
+	DString dstring = (DString){}.init(mem);
+	
+	foreach (part: lstr.dyn_str) {
 		switch (part.kind) {
 			case TEXT:
 				dstring.append(part.text);
 			case INTERP:
-				Value val = self.eval(part.interp)!.get();
-				dstring.append(val.to_string(self.allocator));			
+				Value* val = self.eval(part.interp)!;
+				dstring.append(val.to_string(mem));			
 		}
 	}
 
-	String result = dstring.copy_str(self.allocator);
+	String result = dstring.copy_str(mem);
 	dstring.free();
 	
-	return val({
+	return mem::@clone((Value) {
 		.kind = STRING,
 		._string = result
 	});
 }
 
-fn EValue? Interpreter.eval_infix(&self, Expr* expr)
+fn Value*? Interpreter.eval_infix(&self, Expr* expr)
 {
     Infix* ifx = &expr.infix;
 
 	// TODO: find a cleaner solution
-	if (ifx.op == DOT_ACCESS) {
- 		Value lhs = self.eval(ifx.lhs)!.get();
-		if (lhs.kind != RECORD) {
-			self.diagnostic.error(ifx.lhs.span, "value must be a RECORD");
-			return RUNTIME_ERROR~;
-		}
-		String index = ifx.rhs.span.slice;
-		if (!lhs._record.values.has_key(index)) {
-			self.diagnostic.error(ifx.rhs.span, "cannot find field");
-			return RUNTIME_ERROR~;
-		}
-		return ref(&lhs._record.values[index]);
-	}
+	// if (ifx.op == FIELD) {
+ // 		Value lhs = self.eval(ifx.lhs)!.get();
+	// 	if (lhs.kind != RECORD) {
+	// 		self.diagnostic.error(ifx.lhs.span, "value must be a RECORD");
+	// 		return RUNTIME_ERROR~;
+	// 	}
+	// 	String index = ifx.rhs.span.slice;
+	// 	if (!lhs._record.values.has_key(index)) {
+	// 		self.diagnostic.error(ifx.rhs.span, "cannot find field");
+	// 		return RUNTIME_ERROR~;
+	// 	}
+	// 	return ref(&lhs._record.values[index]);
+	// }
 
-    EValue lhs = self.eval(ifx.lhs)!;
-    EValue rhs = self.eval(ifx.rhs)!;
+    Value* lhs = self.eval(ifx.lhs)!;
+    Value* rhs = self.eval(ifx.rhs)!;
 
-    if (try val = self.eval_assign(ifx, lhs, rhs)) return val;
+    // if (try val = self.eval_assign(ifx, lhs, rhs)) return val;
 	
-    return val(value::apply_op(ifx.op, lhs.get(), rhs.get()));
+    return value::apply_op(ifx.op, lhs, rhs);
 }
 
-fn EValue? Interpreter.eval_assign(&self, Infix* ifx, EValue lhs, EValue rhs)
-{
-	if (lhs.kind != REF) {
-		self.diagnostic.error(ifx.lhs.span, "the lhs is not assignable");
-		return RUNTIME_ERROR~;
-	}
-	Value rhs_v = rhs.get();
-	Value lhs_v = lhs.get();
-	switch (ifx.op) {
-        case ADD_ASGN:
-			rhs_v = value::apply_op(ADD, lhs_v, rhs_v)!;
-			nextcase ASGN;
-		case SUB_ASGN:
-			rhs_v = value::apply_op(SUB, lhs_v, rhs_v)!;
-        case MUL_ASGN:
-			rhs_v = value::apply_op(MUL, lhs_v, rhs_v)!;
-		case DIV_ASGN:
-			rhs_v = value::apply_op(DIV, lhs_v, rhs_v)!;
-        case ASGN:
-			*(lhs.ref) = rhs_v;
-		default: return NOT_ASSIGNMENT~;
-	}
-	return val(value::UNIT);
-}
-fn EValue? Interpreter.eval_prefix(&self, Expr* expr)
+// fn Value*? Interpreter.eval_assign(&self, Infix* ifx, Value* lhs, Value* rhs)
+// {
+// 	if (lhs.kind != REF) {
+// 		self.diagnostic.error(ifx.lhs.span, "the lhs is not assignable");
+// 		return RUNTIME_ERROR~;
+// 	}
+// 	Value rhs_v = rhs.get();
+// 	Value lhs_v = lhs.get();
+// 	switch (ifx.op) {
+//         case ADD_ASGN:
+// 			rhs_v = value::apply_op(ADD, lhs_v, rhs_v)!;
+// 			nextcase ASGN;
+// 		case SUB_ASGN:
+// 			rhs_v = value::apply_op(SUB, lhs_v, rhs_v)!;
+//         case MUL_ASGN:
+// 			rhs_v = value::apply_op(MUL, lhs_v, rhs_v)!;
+// 		case DIV_ASGN:
+// 			rhs_v = value::apply_op(DIV, lhs_v, rhs_v)!;
+//         case ASGN:
+// 			*(lhs.ref) = rhs_v;
+// 		default: return NOT_ASSIGNMENT~;
+// 	}
+// 	return val(value::UNIT);
+// }
+fn Value*? Interpreter.eval_prefix(&self, Expr* expr)
 {
     Prefix* pfx = &expr.prefix;
-	Value rhs = self.eval(pfx.rhs)!.get();
+	Value* rhs = self.eval(pfx.rhs)!;
     switch (pfx.op) {
-        case POS: return val(value::pos(rhs));
-        case NEG: return val(value::neg(rhs));
-        case NOT: return val(value::not(rhs));
+        case POS: return (value::pos(rhs));
+        case NEG: return (value::neg(rhs));
+        case NOT: return (value::not(rhs));
         default: unreachable("unhandled prefix op");
     }
 }
-fn EValue? Interpreter.eval_binding(&self, Expr* expr)
+fn Value*? Interpreter.eval_binding(&self, Expr* expr)
 {
-	Binding* bnd = &expr.binding;
-	Value value = self.eval(bnd.value)!.get();
+	Binding* bnd = &expr.bnd;
+	Value* value = self.eval(bnd.value)!;
 
-	switch (bnd.type) {
-		case LET:
-		case MUT:
-			self.scope.set(bnd.id, value);
-		//! TODO env
-		case ENV:	// os::set_var();
-		default: unreachable("Not a binding keyword");			
-	}
-	return val(value::UNIT);
+	
+	self.scope.set(bnd.typed_name.ident.id, value);
+	// switch (bnd.type) {
+	// 	case LET:
+	// 	case MUT:
+	// 		self.scope.set(bnd.id, value);
+	// 	//! TODO env
+	// 	case ENV:	// os::set_var();
+	// 	default: unreachable("Not a binding keyword");			
+	// }
+	return mem::@clone(value::UNIT);
 }
 
-fn EValue? Interpreter.eval_block(&self, Block* expr, Nullable{ Scope* } scope = nullable::NULL)
-{
-	// Block* blk = &expr.block;
+// fn Value*? Interpreter.eval_block(&self, Block* expr, Nullable{ Scope* } scope = nullable::NULL)
+// {
+// 	// Block* blk = &expr.block;
 	
-	Scope* local_scope = scope.ptr;
-	// Create an owned scope if not provided
-	bool owned = scope.is_null();
-	if (owned) {
-		local_scope = scope::new_ref(
-			self.allocator, nullable::value(self.scope)
-		);	
-	}
-	defer if (owned) {
-		local_scope.free();
-		alloc::free(self.allocator, local_scope);
-	}
+// 	Scope* local_scope = scope.ptr;
+// 	// Create an owned scope if not provided
+// 	bool owned = scope.is_null();
+// 	if (owned) {
+// 		local_scope = scope::new_ref(
+// 			self.allocator, nullable::value(self.scope)
+// 		);	
+// 	}
+// 	defer if (owned) {
+// 		local_scope.free();
+// 		alloc::free(self.allocator, local_scope);
+// 	}
 
-	self.scope = local_scope;
-	defer {
-		self.scope = local_scope.parent.ptr;
-	}
+// 	self.scope = local_scope;
+// 	defer {
+// 		self.scope = local_scope.parent.ptr;
+// 	}
 	
-	Value last = value::UNIT;
-	foreach (stmt: expr.stmts) {
-		last = self.eval(stmt)!.get();
-	}
+// 	Value last = value::UNIT;
+// 	foreach (stmt: expr.stmts) {
+// 		last = self.eval(stmt)!.get();
+// 	}
 
-	return val(last);	
-}
+// 	return val(last);	
+// }
 
-// fn EValue? Interpreter.eval_fn(&self, Expr* expr)
+// fn Value*? Interpreter.eval_fn(&self, Expr* expr)
 // {
 // 	Function* fun = &expr.fun;
 // 	self.scope.set(fun.identifier.span.slice, {
@@ -312,31 +285,31 @@ fn Callable? Interpreter.eval_callee(&self, Expr* expr)
 	return { .kind = INTERNAL, ._fn = callee._fn };
 }
 
-fn EValue? Interpreter.eval_call(&self, Expr* expr)
+fn Value*? Interpreter.eval_call(&self, Expr* expr)
 {
 	Call* call = &expr.call;
 	Callable callable = self.eval_callee(call.callee)!;
 	
-	List{ Value } args; args.init(self.allocator, call.args.size);
+	List{ Value* } args; args.init(mem, call.args.size);
     defer args.free();
 
 	foreach (arg_expr: call.args) {
-		args.push(self.eval(arg_expr)!.get());
+		args.push(self.eval(arg_expr)!);
 	}
 	switch (callable.kind) {
 		case INTERNAL: nextcase;
 			// return self.call_fn(callable._fn, args.array_view());
 		case EXTERNAL:
-			Value? ret = self.call_external(callable._cmd, args.array_view()).get();
+			Value*? ret = self.call_external(callable._cmd, args.array_view());
 			if (catch err2 = ret) {
 				self.diagnostic.error(call.callee.span, "command not found");
 				return RUNTIME_ERROR~;
 			}
-		return val(ret);
+		return ret;
 	}
 }
 
-// fn EValue? Interpreter.call_fn(&self, Fn _fn, Value[] args)
+// fn Value*? Interpreter.call_fn(&self, Fn _fn, Value[] args)
 // {	
 // 	Scope* fn_scope = scope::new_ref(self.allocator, nullable::value(self.scope));
 // 	defer fn_scope.free();
@@ -359,17 +332,17 @@ fn EValue? Interpreter.eval_call(&self, Expr* expr)
 <*
 	@param [in] cmd
 *>
-fn EValue? Interpreter.call_external(&self, String cmd, Value[] cmd_args)
+fn Value*? Interpreter.call_external(&self, String cmd, Value*[] cmd_args)
 {
-	String[] cmd_line = alloc::new_array(self.allocator, String, cmd_args.len + 1);
-	defer alloc::free(self.allocator, cmd_line);
+	String[] cmd_line = alloc::new_array(mem, String, cmd_args.len + 1);
+	defer alloc::free(mem, cmd_line);
 
 	cmd_line[0] = cmd;
 	foreach(i, arg: cmd_args) {
-		cmd_line[i + 1] = arg.to_string(self.allocator);
+		cmd_line[i + 1] = arg.to_string(mem);
 	}
 	defer foreach (arg: cmd_line[1..]) {
-		arg.free(self.allocator);
+		arg.free(mem);
 	}
 	
 	if (catch err = process::run(cmd_line, INHERIT_STDIO | INHERIT_ENV )) {
@@ -381,20 +354,20 @@ fn EValue? Interpreter.call_external(&self, String cmd, Value[] cmd_args)
 		}
 	}
 
-	return val(value::UNIT);
+	return mem::@clone(value::UNIT);
 }
 
-fn EValue? Interpreter.eval_return(&self, Expr* expr)
+fn Value*? Interpreter.eval_return(&self, Expr* expr)
 {
 	Return* ret = &expr.ret;
-	self.return_value = value::UNIT;
+	self.return_value = mem::@clone(value::UNIT);
 	if(!ret.value.is_null()) {
-		self.return_value = self.eval(ret.value.ptr)!.get();
+		self.return_value = self.eval(ret.value.ptr)!;
 	}
 	return RETURN_STATEMENT~;
 }
 
-fn EValue? Interpreter.eval_array(&self, Expr* expr)
+fn Value*? Interpreter.eval_array(&self, Expr* expr)
 {
 	Array* arr = &expr.array;
 
@@ -407,7 +380,7 @@ fn EValue? Interpreter.eval_array(&self, Expr* expr)
 		._array = { values }
 	});
 }
-fn EValue? Interpreter.eval_record(&self, Expr* expr)
+fn Value*? Interpreter.eval_record(&self, Expr* expr)
 {
 	Record* rec = &expr.record;
 	HashMap{ String, Value } values; values.init(self.allocator);
@@ -429,7 +402,7 @@ fn EValue? Interpreter.eval_record(&self, Expr* expr)
 	});
 }
 
-fn EValue? Interpreter.eval_index(&self, Expr* expr)
+fn Value*? Interpreter.eval_index(&self, Expr* expr)
 {
 	Index* idx = &expr.index;
 	Value index_v = self.eval(idx.index)!.get();
@@ -510,7 +483,7 @@ fn PipeStage? Interpreter.eval_and_classify_stage(&self, Expr* expr)
 	cmd | append path
 */
 
-fn EValue? Interpreter.eval_pipeline(&self, Expr* expr)
+fn Value*? Interpreter.eval_pipeline(&self, Expr* expr)
 {
 	Pipeline* ppln = &expr.pipeline;
 

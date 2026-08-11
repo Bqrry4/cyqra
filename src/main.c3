@@ -18,24 +18,36 @@ fn void interactive() => @pool()
     Reader reader @noinit;
     Lexer lexer @noinit;
     Parser parser @noinit;
+    Sema sema @noinit;
+    Compiler compiler @noinit;
+
     mem::@scoped(core::arena::alloc){
-    	Ast ast = ast::new();
         reader = reader::new();
         lexer = lexer::new();
         parser = parser::new(&diag);
-       // Interpreter interpreter = interpreter::new(tmem, &diag);
+    	sema = sema::new(&diag);
+        compiler = ir::new();
+        // Interpreter interpreter = interpreter::new(tmem, &diag);
 
+       	Ast ast = ast::new();
     	FnDecl fn_decl; fn_decl.init(mem);
         while (true) {
             String line = reader.read_line();
             //! TODO: implement proper render in the ^reader
             io::printf("\r\n");
             List{Token} tokens = lexer.analyze(line);
-             
             diag.source = line;
+
+            ast.clear();
+            fn_decl.clear();
             parser.cursor.tokens = tokens.array_view();
             parser.cursor.reset();
             parser.parse(&ast, &fn_decl);
+            sema.register_signatures(fn_decl);
+	        sema.resolve(&ast);
+            
+            compiler.generate(&ast);
+            dasm::dissasembly(compiler.code);
             // interpreter.interpret(parser.ast);
          }
      };
@@ -50,11 +62,13 @@ fn void from_file(String file_name, String content)
 
     Lexer lexer @noinit;
     Parser parser @noinit;
+    Sema sema @noinit;
     mem::@scoped(core::arena::alloc) {
         lexer = lexer::new();
         parser = parser::new(&diag);
+    	sema = sema::new(&diag);
 
-    	Ast ast = ast::new();
+        Ast ast = ast::new();
         FnDecl fn_decl; fn_decl.init(mem);
 
         List{Token} tokens = lexer.analyze(content);
@@ -62,6 +76,8 @@ fn void from_file(String file_name, String content)
         parser.cursor.tokens = tokens.array_view();
         parser.cursor.reset(); 
         parser.parse(&ast, &fn_decl);
+        sema.register_signatures(fn_decl);
+        sema.resolve(&ast);
     };
 
     // Interpreter interpreter = interpreter::new(tmem, &diag);
