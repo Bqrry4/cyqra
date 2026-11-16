@@ -45,7 +45,7 @@ bitstruct Ifmt : ulong
 bitstruct Ufmt : ulong
 {
 	RegId rd  : 8..15;
-	short imm : 16..31;
+	ushort imm : 16..31;
 }
 bitstruct Sfmt : ulong
 {

@@ -11,16 +11,23 @@ import cyqra::ast;
 
 faultdef UNSUPPORTED_OP;
 
+
+/*
+	{:err, :whatever}
+	{:}
+*/
+
 enum ValueKind
 {
-	UNIT,
+	VOID,
 	INT,
 	FLOAT,
 	STRING,
 	FUNCTION,
 	ARRAY,
 	RECORD,
-	STREAM
+	STREAM,
+	RESULT
 }
 
 struct Fn
@@ -55,8 +62,8 @@ struct Value
 	}
 }
 
-const Value UNIT = {
-	.kind = UNIT
+const Value VOID = {
+	.kind = VOID
 };
 
 fn Value _int(long _int) => { .kind = INT, ._int = _int };
@@ -174,61 +181,61 @@ fn Value*? add(Value* lhs, Value* rhs)
     }
 }
 
-// fn Value*? sub(Value* lhs, Value* rhs)
-// {
-//     switch (lhs.kind) {
-//         case INT: return mem::@clone(value::_int(lhs._int - rhs._int));
-//         case FLOAT: return mem::@clone(value::_float(lhs._float - rhs._float));
-//         default: return UNSUPPORTED_OP~;
-//     }
-// }
+ fn Value*? sub(Value* lhs, Value* rhs)
+ {
+     switch (lhs.kind) {
+         case INT: return mem::@clone(value::_int(lhs._int - rhs._int));
+         case FLOAT: return mem::@clone(value::_float(lhs._float - rhs._float));
+         default: return UNSUPPORTED_OP~;
+     }
+ }
 
-// fn Value*? mul(Value* lhs, Value* rhs)
-// {
-//     switch (lhs.kind) {
-//         case INT: return mem::@clone(value::_int(lhs._int * rhs._int));
-//         case FLOAT: return mem::@clone(value::_float(lhs._float * rhs._float));
-//         default: return UNSUPPORTED_OP~;
-//     }
-// }
+ fn Value*? mul(Value* lhs, Value* rhs)
+ {
+     switch (lhs.kind) {
+         case INT: return mem::@clone(value::_int(lhs._int * rhs._int));
+         case FLOAT: return mem::@clone(value::_float(lhs._float * rhs._float));
+         default: return UNSUPPORTED_OP~;
+     }
+ }
 
-// fn Value*? div(Value* lhs, Value* rhs)
-// {
-//     switch (lhs.kind) {
-//         case INT: return mem::@clone(value::_float((double)lhs._int / (double)rhs._int));
-//         case FLOAT: return mem::@clone(value::_float(lhs._float / rhs._float));
-//         default: return UNSUPPORTED_OP~;
-//     }
-// }
+ fn Value*? div(Value* lhs, Value* rhs)
+ {
+     switch (lhs.kind) {
+         case INT: return mem::@clone(value::_float((double)lhs._int / (double)rhs._int));
+         case FLOAT: return mem::@clone(value::_float(lhs._float / rhs._float));
+         default: return UNSUPPORTED_OP~;
+     }
+ }
 
-// fn Value*? floor_div(Value* lhs, Value* rhs)
-// {
-//     switch (lhs.kind) {
-//         case INT: return mem::@clone(value::_int(lhs._int / rhs._int));
-//         case FLOAT: return mem::@clone(value::_float(math::floor(lhs._float / rhs._float)));
-//         default: return UNSUPPORTED_OP~;
-//     }
-// }
+ fn Value*? floor_div(Value* lhs, Value* rhs)
+ {
+     switch (lhs.kind) {
+         case INT: return mem::@clone(value::_int(lhs._int / rhs._int));
+         case FLOAT: return mem::@clone(value::_float(math::floor(lhs._float / rhs._float)));
+         default: return UNSUPPORTED_OP~;
+     }
+ }
 
-// fn Value*? mod(Value* lhs, Value* rhs)
-// {
-//     switch (lhs.kind) {
-//         case INT: return mem::@clone(value::_int(lhs._int % rhs._int));
-//         case FLOAT: return mem::@clone(value::_float(
-//             lhs._float - math::floor(lhs._float / rhs._float) * rhs._float
-//         ));
-//         default: return UNSUPPORTED_OP~;
-//     }
-// }
+ fn Value*? mod(Value* lhs, Value* rhs)
+ {
+     switch (lhs.kind) {
+         case INT: return mem::@clone(value::_int(lhs._int % rhs._int));
+         case FLOAT: return mem::@clone(value::_float(
+             lhs._float - math::floor(lhs._float / rhs._float) * rhs._float
+         ));
+         default: return UNSUPPORTED_OP~;
+     }
+ }
 
-// fn Value*? pow(Value* lhs, Value* rhs)
-// {
-//     switch (lhs.kind) {
-//         case INT: return mem::@clone(value::_float(math::pow((double)lhs._int, (double)rhs._int)));
-//         case FLOAT: return mem::@clone(value::_float(math::pow(lhs._float, rhs._float)));
-//         default: return UNSUPPORTED_OP~;
-//     }
-// }
+ fn Value*? pow(Value* lhs, Value* rhs)
+ {
+     switch (lhs.kind) {
+         case INT: return mem::@clone(value::_float(math::pow((double)lhs._int, (double)rhs._int)));
+         case FLOAT: return mem::@clone(value::_float(math::pow(lhs._float, rhs._float)));
+         default: return UNSUPPORTED_OP~;
+     }
+ }
 // fn Value*? apply_op(Operator op, Value* lhs, Value* rhs)
 // {
 //     if (lhs.kind != rhs.kind) {
@@ -245,7 +252,7 @@ fn Value*? add(Value* lhs, Value* rhs)
 //         default: return UNSUPPORTED_OP~;
 //     }
 // }
-
+//
 // fn Value*? pos(Value* val)
 // {
 //     switch (val.kind) {
@@ -254,7 +261,7 @@ fn Value*? add(Value* lhs, Value* rhs)
 //         default:    return UNSUPPORTED_OP~;
 //     }
 // }
-
+//
 // fn Value*? neg(Value* val)
 // {
 //     switch (val.kind) {
@@ -264,11 +271,11 @@ fn Value*? add(Value* lhs, Value* rhs)
 //     }
 // 	return val;
 // }
-
+//
 // fn Value*? not(Value* val)
 // {
 //     switch (val.kind) {
-//         // case BOOL: return value::_bool(!val._bool);
+//          case BOOL: return value::_bool(!val._bool);
 //         default:   return UNSUPPORTED_OP~;
 //     }
 // }

@@ -8,6 +8,7 @@ import cyqra::parser;
 // import cyqra::interpreter;
 import cyqra::readline::reader;
 import cyqra::core;
+import cyqra::vm;
 
 fn void interactive() => @pool()
 {
@@ -28,9 +29,11 @@ fn void interactive() => @pool()
     	sema = sema::new(&diag);
         compiler = ir::new();
         // Interpreter interpreter = interpreter::new(tmem, &diag);
-
+        
+        
        	Ast ast = ast::new();
     	FnDecl fn_decl; fn_decl.init(mem);
+        
         while (true) {
             String line = reader.read_line();
             //! TODO: implement proper render in the ^reader
@@ -49,6 +52,11 @@ fn void interactive() => @pool()
             compiler.generate(&ast);
             dasm::dissasembly(compiler.code);
             // interpreter.interpret(parser.ast);
+
+            io::printn(compiler.consts.len());
+            Vm vm = vm::new(compiler.consts.array_view());
+            vm.run(compiler.code.array_view());
+            vm.dump();    
          }
      };
 }

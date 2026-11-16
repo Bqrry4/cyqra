@@ -64,15 +64,16 @@ fn void Compiler.compile_literal(&self, Literal* l)
 {
 	switch (l.type) {
 	case INT:
-		self.consts.push(value::_int(l._int));
 
 		Instruction i = {
 			.op = LOADK,
 			.u = {
 				.rd = self.t_alloc.reserve(),
-				.imm = (short)self.consts.len()
+				.imm = (ushort)self.consts.len()
 			}
 		};
+	
+		self.consts.push(value::_int(l._int));
 		self.code.push(i);
 	case FLOAT:
 		self.consts.push(value::_float(l._float));
@@ -134,7 +135,7 @@ fn void Compiler.compile_var(&self, Variable* variable)
 		.op = LOAD,
 		.u = {
 			.rd = self.t_alloc.reserve(),
-			.imm = self.locals[(sz)variable.id],
+			.imm = (ushort)self.locals[(sz)variable.id],
 		}
 	};
 	self.code.push(i);
